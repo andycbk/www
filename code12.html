@@ -182,7 +182,7 @@
     
     <div class="random-setup">
         <label for="ai-depth">隨機棋步：</label>
-        <input type="number" id="ai-depth" min="2" max="30" value="10">
+        <input type="number" id="ai-depth" min="2" max="360" value="10">
         <button id="generate-random">生成殘局</button>
     </div>
     
@@ -748,9 +748,9 @@
             
             function generateRandomGame() {
                 initGame();
-                const numMoves = parseInt(aiDepthInput.value, 10);
-                if (isNaN(numMoves) || numMoves < 2 || numMoves > 30) {
-                    winnerMessageElement.textContent = '隨機步數請輸入2到30之間的整數！';
+                const numMoves = parseInt(aiDepthInput.value, 20);
+                if (isNaN(numMoves) || numMoves < 2 || numMoves > 360) {
+                    winnerMessageElement.textContent = '隨機步數請輸入2到360之間的整數！';
                     return;
                 }
                 let movesPlaced = 0, randomPlayer = 1;

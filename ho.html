@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>黑洞吞噬遊戲</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom CSS for game elements */
+        body {
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            overflow: hidden; /* Prevent scrolling */
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            background-color: #1a202c; /* Dark background */
+            color: #e2e8f0; /* Light text */
+        }
+        canvas {
+            background-color: #2d3748; /* Darker background for canvas */
+            display: block;
+            border-radius: 1rem; /* Rounded corners for canvas */
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            touch-action: none; /* Prevent default touch actions like scrolling/zooming on canvas */
+        }
+        .ui-panel {
+            background-color: #2d3748;
+            border-radius: 1rem;
+            padding: 1rem;
+            margin-bottom: 1rem;
+            width: 90%;
+            max-width: 400px;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+        .virtual-joystick {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 150px;
+            height: 150px;
+            background-color: rgba(0, 0, 0, 0.3);
+            border-radius: 50%;
+            display: flex; /* Always visible */
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            touch-action: none; /* Prevent default touch actions on joystick */
+        }
+        .joystick-handle {
+            width: 60px;
+            height: 60px;
+            background-color: rgba(255, 255, 255, 0.6);
+            border-radius: 50%;
+            cursor: grab;
+            touch-action: none; /* Prevent default touch actions on handle */
+        }
+        .message-box {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            z-index: 1001;
+            display: none; /* Hidden by default */
+            text-align: center;
+        }
+    </style>
+</head>
+<body class="flex flex-col items-center justify-center min-h-screen bg-gray-900 text-gray-100 p-4">
+
+    <!-- Game UI Panel -->
+    <div class="ui-panel flex justify-between items-center text-lg font-bold">
+        <div>分數: <span id="score">0</span></div>
+        <div>大小: <span id="size">100</span></div>
+        <div class="flex items-center">
+            能量:
+            <div class="w-24 h-4 bg-gray-700 rounded-full ml-2 overflow-hidden">
+                <div id="energy-bar" class="h-full bg-green-500 transition-all duration-100 ease-linear" style="width: 100%;"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Game Canvas -->
+    <canvas id="gameCanvas" class="w-full max-w-md aspect-square"></canvas>
+
+    <!-- Acceleration Button -->
+    <button id="accelerateButton" class="mt-4 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-full shadow-lg transition duration-300 ease-in-out transform hover:scale-105 active:scale-95">
+        加速
+    </button>
+
+    <!-- Virtual Joystick -->
+    <div id="virtualJoystick" class="virtual-joystick">
+        <div id="joystickHandle" class="joystick-handle"></div>
+    </div>
+
+    <!-- Message Box -->
+    <div id="messageBox" class="message-box">
+        <p id="messageText"></p>
+        <button id="messageBoxClose" class="mt-4 px-4 py-2 bg-blue-500 rounded-lg">好的</button>
+    </div>
+
+    <script>
+        // Global variables for Firebase configuration and app ID (provided by the Canvas environment)
+        // These are typically injected by the Canvas runtime.
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
+        // Fix: Changed 'initialAuthToken' to '__initial_auth_token' to prevent ReferenceError
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+        // Game Constants
+        const CANVAS_WIDTH = 600; // Logical width for game calculations
+        const CANVAS_HEIGHT = 600; // Logical height for game calculations
+        const INITIAL_PLAYER_RADIUS = 30;
+        const PLAYER_SPEED_BASE = 2;
+        const ACCELERATION_MULTIPLIER = 2;
+        const ENERGY_MAX = 100;
+        const ENERGY_CONSUMPTION_RATE = 0.5; // per frame
+        const ENERGY_RECOVERY_RATE = 0.2; // per frame
+        const OBJECT_COUNT = 50;
+        const AI_COUNT = 3;
+        const AI_SPEED_MULTIPLIER = 0.8; // AI moves slightly slower than player
+        const AI_SIGHT_RANGE = 200; // AI looks for objects within this range
+        const AI_FLEE_RANGE = 150; // AI flees from larger holes within this range
+
+        // Game Variables
+        let canvas, ctx;
+        let player;
+        let gameObjects = []; // Consumable objects
+        let aiHoles = []; // AI controlled holes
+        let score = 0;
+        let energy = ENERGY_MAX;
+        let isAccelerating = false;
+        let joystick = { active: false, startX: 0, startY: 0, handleX: 0, handleY: 0 };
+        let animationFrameId;
+
+        // UI Elements
+        const scoreDisplay = document.getElementById('score');
+        const sizeDisplay = document.getElementById('size');
+        const energyBar = document.getElementById('energy-bar');
+        const accelerateButton = document.getElementById('accelerateButton');
+        const virtualJoystickDiv = document.getElementById('virtualJoystick');
+        const joystickHandle = document.getElementById('joystickHandle');
+        const messageBox = document.getElementById('messageBox');
+        const messageText = document.getElementById('messageText');
+        const messageBoxClose = document.getElementById('messageBoxClose');
+
+        // Utility function to show a custom message box
+        function showMessageBox(message) {
+            messageText.textContent = message;
+            messageBox.style.display = 'block';
+        }
+
+        // Event listener for closing the message box
+        messageBoxClose.addEventListener('click', () => {
+            messageBox.style.display = 'none';
+        });
+
+        // Game Object Class
+        class GameObject {
+            constructor(x, y, radius, color, type = 'consumable') {
+                this.x = x;
+                this.y = y;
+                this.radius = radius;
+                this.color = color;
+                this.type = type; // 'consumable' or 'ai'
+                this.dx = 0; // Direction x for AI
+                this.dy = 0; // Direction y for AI
+                this.target = null; // AI's current target
+            }
+
+            draw() {
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                ctx.fillStyle = this.color;
+                ctx.fill();
+                ctx.closePath();
+            }
+
+            // Update function for AI movement
+            update(playerHole, allHoles, consumables) {
+                if (this.type === 'ai') {
+                    // AI Logic:
+                    // 1. Prioritize fleeing from larger holes (including player)
+                    // 2. Prioritize chasing smaller consumables
+                    // 3. Prioritize chasing smaller AI holes
+                    // 4. Otherwise, random movement
+
+                    let targetX = this.x;
+                    let targetY = this.y;
+                    let fleeTarget = null;
+                    let chaseTarget = null;
+                    let minFleeDistance = Infinity;
+                    let minChaseDistance = Infinity;
+
+                    // Check for larger holes to flee from
+                    allHoles.forEach(hole => {
+                        if (hole !== this && hole.radius > this.radius) {
+                            const dist = distance(this, hole);
+                            if (dist < AI_FLEE_RANGE && dist < minFleeDistance) {
+                                fleeTarget = hole;
+                                minFleeDistance = dist;
+                            }
+                        }
+                    });
+
+                    // Check for smaller consumables to chase
+                    consumables.forEach(obj => {
+                        if (obj.radius < this.radius) {
+                            const dist = distance(this, obj);
+                            if (dist < AI_SIGHT_RANGE && dist < minChaseDistance) {
+                                chaseTarget = obj;
+                                minChaseDistance = dist;
+                            }
+                        }
+                    });
+
+                    // Check for smaller AI holes to chase
+                    allHoles.forEach(hole => {
+                        if (hole !== this && hole.radius < this.radius) {
+                            const dist = distance(this, hole);
+                            if (dist < AI_SIGHT_RANGE && dist < minChaseDistance) {
+                                chaseTarget = hole;
+                                minChaseDistance = dist;
+                            }
+                        }
+                    });
+
+
+                    if (fleeTarget) {
+                        // Flee from larger hole
+                        const angle = Math.atan2(this.y - fleeTarget.y, this.x - fleeTarget.x);
+                        targetX = this.x + Math.cos(angle) * (this.radius * 2); // Move away
+                        targetY = this.y + Math.sin(angle) * (this.radius * 2);
+                    } else if (chaseTarget) {
+                        // Chase smaller object/hole
+                        const angle = Math.atan2(chaseTarget.y - this.y, chaseTarget.x - this.x);
+                        targetX = chaseTarget.x;
+                        targetY = chaseTarget.y;
+                    } else {
+                        // Random movement if no target or threat
+                        if (this.target === null || distance(this, this.target) < 10) {
+                            this.target = {
+                                x: Math.random() * CANVAS_WIDTH,
+                                y: Math.random() * CANVAS_HEIGHT
+                            };
+                        }
+                        targetX = this.target.x;
+                        targetY = this.target.y;
+                    }
+
+                    const angleToTarget = Math.atan2(targetY - this.y, targetX - this.x);
+                    this.dx = Math.cos(angleToTarget);
+                    this.dy = Math.sin(angleToTarget);
+
+                    const speed = PLAYER_SPEED_BASE * AI_SPEED_MULTIPLIER * (1 - (this.radius / (CANVAS_WIDTH / 2)) * 0.5); // Slower when bigger
+                    this.x += this.dx * speed;
+                    this.y += this.dy * speed;
+
+                    // Keep AI within bounds
+                    this.x = Math.max(this.radius, Math.min(CANVAS_WIDTH - this.radius, this.x));
+                    this.y = Math.max(this.radius, Math.min(CANVAS_HEIGHT - this.radius, this.y));
+                }
+            }
+        }
+
+        // Distance calculation
+        function distance(obj1, obj2) {
+            const dx = obj1.x - obj2.x;
+            const dy = obj1.y - obj2.y;
+            return Math.sqrt(dx * dx + dy * dy);
+        }
+
+        // Initialize Game
+        function init() {
+            canvas = document.getElementById('gameCanvas');
+            ctx = canvas.getContext('2d');
+
+            // Set canvas logical dimensions
+            canvas.width = CANVAS_WIDTH;
+            canvas.height = CANVAS_HEIGHT;
+
+            // Adjust canvas display size for responsiveness
+            resizeCanvas();
+            window.addEventListener('resize', resizeCanvas);
+
+            player = new GameObject(CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2, INITIAL_PLAYER_RADIUS, '#000000', 'player'); // Black hole
+
+            // Generate initial consumable objects
+            for (let i = 0; i < OBJECT_COUNT; i++) {
+                generateConsumable();
+            }
+
+            // Generate initial AI holes
+            for (let i = 0; i < AI_COUNT; i++) {
+                generateAIHole();
+            }
+
+            // Touch event listeners for the virtual joystick
+            // Using { passive: false } to allow preventDefault()
+            virtualJoystickDiv.addEventListener('touchstart', handleJoystickTouchStart, { passive: false });
+            virtualJoystickDiv.addEventListener('touchmove', handleJoystickTouchMove, { passive: false });
+            virtualJoystickDiv.addEventListener('touchend', handleJoystickTouchEnd, { passive: false });
+
+            // Button for acceleration
+            accelerateButton.addEventListener('touchstart', (e) => {
+                e.preventDefault(); // Prevent default touch behavior
+                isAccelerating = true;
+            }, { passive: false });
+            accelerateButton.addEventListener('touchend', () => {
+                isAccelerating = false;
+            });
+            // Also handle mouse events for testing on desktop
+            accelerateButton.addEventListener('mousedown', () => { isAccelerating = true; });
+            accelerateButton.addEventListener('mouseup', () => { isAccelerating = false; });
+            accelerateButton.addEventListener('mouseleave', () => { isAccelerating = false; }); // If mouse leaves button while pressed
+
+            // Start game loop
+            startGameLoop();
+        }
+
+        function resizeCanvas() {
+            // Make canvas fit the width of its container, maintaining aspect ratio
+            const containerWidth = canvas.parentElement.clientWidth;
+            const size = Math.min(containerWidth * 0.9, window.innerHeight * 0.7); // Max 90% of container width, or 70% of screen height
+            canvas.style.width = `${size}px`;
+            canvas.style.height = `${size}px`;
+        }
+
+        function generateConsumable() {
+            const radius = Math.random() * 15 + 5; // Random size between 5 and 20
+            const x = Math.random() * (CANVAS_WIDTH - radius * 2) + radius;
+            const y = Math.random() * (CANVAS_HEIGHT - radius * 2) + radius;
+            const color = `hsl(${Math.random() * 360}, 70%, 60%)`; // Random vibrant color
+            gameObjects.push(new GameObject(x, y, radius, color));
+        }
+
+        function generateAIHole() {
+            const radius = Math.random() * 20 + 20; // AI holes are larger than consumables
+            const x = Math.random() * (CANVAS_WIDTH - radius * 2) + radius;
+            const y = Math.random() * (CANVAS_HEIGHT - radius * 2) + radius;
+            const color = `hsl(${Math.random() * 360}, 50%, 40%)`; // Darker, less vibrant color for AI
+            aiHoles.push(new GameObject(x, y, radius, color, 'ai'));
+        }
+
+        // Virtual Joystick Touch Handlers
+        function handleJoystickTouchStart(e) {
+            // Only activate joystick if a single touch starts on it
+            if (e.touches.length === 1) {
+                joystick.active = true;
+                // Store the initial touch position
+                joystick.startX = e.touches[0].clientX;
+                joystick.startY = e.touches[0].clientY;
+                e.preventDefault(); // Prevent default browser actions like scrolling
+            }
+        }
+
+        function handleJoystickTouchMove(e) {
+            if (joystick.active) {
+                const touch = e.touches[0];
+                const joystickRect = virtualJoystickDiv.getBoundingClientRect();
+                // Calculate the center of the joystick base relative to the viewport
+                const joystickCenterX = joystickRect.left + joystickRect.width / 2;
+                const joystickCenterY = joystickRect.top + joystickRect.height / 2;
+
+                // Calculate displacement from the joystick's center
+                const dx = touch.clientX - joystickCenterX;
+                const dy = touch.clientY - joystickCenterY;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                // Calculate the maximum distance the handle can move from the center
+                // This is the radius of the joystick base minus the radius of the handle
+                const maxDistance = (joystickRect.width / 2) - (joystickHandle.offsetWidth / 2);
+
+                // Limit handle movement within the joystick base
+                if (distance > maxDistance) {
+                    const angle = Math.atan2(dy, dx);
+                    joystick.handleX = Math.cos(angle) * maxDistance;
+                    joystick.handleY = Math.sin(angle) * maxDistance;
+                } else {
+                    joystick.handleX = dx;
+                    joystick.handleY = dy;
+                }
+                // Apply the handle's position visually
+                joystickHandle.style.transform = `translate(${joystick.handleX}px, ${joystick.handleY}px)`;
+
+                // Update player direction based on joystick handle's normalized position (-1 to 1)
+                player.dx = joystick.handleX / maxDistance;
+                player.dy = joystick.handleY / maxDistance;
+                e.preventDefault(); // Prevent default browser actions
+            }
+        }
+
+        function handleJoystickTouchEnd(e) {
+            // Only deactivate if the touch that ended was the one controlling the joystick
+            if (joystick.active) {
+                joystick.active = false;
+                joystick.handleX = 0; // Reset handle position
+                joystick.handleY = 0;
+                joystickHandle.style.transform = `translate(0, 0)`; // Reset handle visually
+                player.dx = 0; // Stop player movement
+                player.dy = 0;
+                e.preventDefault(); // Prevent default browser actions
+            }
+        }
+
+        // Game Loop
+        function startGameLoop() {
+            animationFrameId = requestAnimationFrame(gameLoop);
+        }
+
+        function gameLoop() {
+            update();
+            draw();
+            animationFrameId = requestAnimationFrame(gameLoop);
+        }
+
+        function update() {
+            // Player movement is now directly controlled by player.dx and player.dy
+            // which are updated in handleJoystickTouchMove and reset in handleJoystickTouchEnd.
+            let currentSpeed = PLAYER_SPEED_BASE * (1 - (player.radius / (CANVAS_WIDTH / 2)) * 0.5); // Slower when bigger
+            if (isAccelerating && energy > 0) {
+                currentSpeed *= ACCELERATION_MULTIPLIER;
+                energy = Math.max(0, energy - ENERGY_CONSUMPTION_RATE);
+            } else {
+                energy = Math.min(ENERGY_MAX, energy + ENERGY_RECOVERY_RATE);
+            }
+
+            player.x += player.dx * currentSpeed;
+            player.y += player.dy * currentSpeed;
+
+            // Keep player within bounds
+            player.x = Math.max(player.radius, Math.min(CANVAS_WIDTH - player.radius, player.x));
+            player.y = Math.max(player.radius, Math.min(CANVAS_HEIGHT - player.radius, player.y));
+
+            // Update AI holes
+            const allHoles = [player, ...aiHoles];
+            aiHoles.forEach(ai => ai.update(player, allHoles, gameObjects));
+
+            // Collision detection and consumption
+            // Check player vs consumables
+            for (let i = gameObjects.length - 1; i >= 0; i--) {
+                const obj = gameObjects[i];
+                if (distance(player, obj) < player.radius && player.radius > obj.radius) {
+                    // Player consumes object
+                    player.radius = Math.sqrt(player.radius * player.radius + obj.radius * obj.radius); // Grow based on area
+                    score += Math.floor(obj.radius);
+                    gameObjects.splice(i, 1);
+                    generateConsumable(); // Replace consumed object
+                }
+            }
+
+            // Check AI holes vs consumables and other AI holes
+            for (let i = aiHoles.length - 1; i >= 0; i--) {
+                const ai = aiHoles[i];
+
+                // AI consumes consumables
+                for (let j = gameObjects.length - 1; j >= 0; j--) {
+                    const obj = gameObjects[j];
+                    if (distance(ai, obj) < ai.radius && ai.radius > obj.radius) {
+                        ai.radius = Math.sqrt(ai.radius * ai.radius + obj.radius * obj.radius);
+                        gameObjects.splice(j, 1);
+                        generateConsumable();
+                    }
+                }
+
+                // AI consumes other AI holes or player
+                for (let j = allHoles.length - 1; j >= 0; j--) {
+                    const otherHole = allHoles[j];
+                    if (ai !== otherHole && distance(ai, otherHole) < ai.radius && ai.radius > otherHole.radius) {
+                        ai.radius = Math.sqrt(ai.radius * ai.radius + otherHole.radius * otherHole.radius);
+                        if (otherHole.type === 'player') {
+                            // Player was consumed by AI
+                            showMessageBox(`遊戲結束! 你的黑洞被吞噬了。得分: ${score}`);
+                            cancelAnimationFrame(animationFrameId); // Stop game loop
+                            return; // Exit update loop
+                        } else {
+                            // AI consumes another AI
+                            const consumedAIIndex = aiHoles.indexOf(otherHole);
+                            if (consumedAIIndex !== -1) {
+                                aiHoles.splice(consumedAIIndex, 1);
+                                generateAIHole(); // Replace consumed AI
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Update UI
+            scoreDisplay.textContent = score;
+            sizeDisplay.textContent = Math.floor(player.radius);
+            energyBar.style.width = `${(energy / ENERGY_MAX) * 100}%`;
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT); // Clear canvas
+
+            // Draw game objects
+            gameObjects.forEach(obj => obj.draw());
+
+            // Draw AI holes
+            aiHoles.forEach(ai => ai.draw());
+
+            // Draw player
+            player.draw();
+        }
+
+        // Initialize the game when the window loads
+        window.onload = init;
+    </script>
+</body>
+</html>

@@ -289,7 +289,7 @@
             <div class="settings-container">
                 <div class="setting-item">
                     <label for="speedControl">控制灵敏度</label>
-                    <input type="range" id="speedControl" min="10" max="100" value="50">
+                    <input type="range" id="speedControl" min="10" max="100" value="30">
                 </div>
             </div>
         </div>
@@ -331,12 +331,12 @@
                 
                 this.gravity = -0.015;
                 this.ballVelocity = new THREE.Vector3(0, 0, 0);
-                this.friction = 0.97;
+                this.friction = 0.965; // [!CHANGE!] 进一步增加摩擦力
                 this.ballRadius = 0.5;
                 
                 this.gyroData = { x: 0, y: 0 };
                 this.gyroCalibration = { x: 0, y: 0 };
-                this.gyroSensitivity = 0.015;
+                this.gyroSensitivity = 0.01; // 默认灵敏度
                 
                 this.gameTimer = null;
                 
@@ -442,7 +442,6 @@
             }
             
             setupEventListeners() {
-                // [!REFACTORED!] 简化了按钮的事件绑定，都统一调用startGame
                 document.getElementById('pauseBtn').addEventListener('click', () => this.pauseGame());
                 document.getElementById('resumeBtn').addEventListener('click', () => this.resumeGame());
                 document.getElementById('mainMenuBtn').addEventListener('click', () => this.showMainMenu());
@@ -456,7 +455,7 @@
                 window.addEventListener('resize', () => this.handleResize());
                 
                 const speedSlider = document.getElementById('speedControl');
-                const savedSpeed = localStorage.getItem('gameSpeedSetting') || '40';
+                const savedSpeed = localStorage.getItem('gameSpeedSetting') || '30'; // [!CHANGE!] 默认值改为30
                 speedSlider.value = savedSpeed;
                 this.setSensitivityFromSlider(savedSpeed);
                 
@@ -468,8 +467,9 @@
             }
 
             setSensitivityFromSlider(sliderValue) {
-                const minSens = 0.005;
-                const maxSens = 0.025;
+                // [!CHANGE!] 将滑块值映射到更低的灵敏度范围
+                const minSens = 0.002;
+                const maxSens = 0.015;
                 this.gyroSensitivity = minSens + ((sliderValue - 10) / 90) * (maxSens - minSens);
             }
             
@@ -486,7 +486,6 @@
                 alert('陀螺仪校准完成！请将当前姿势作为水平。');
             }
             
-            // [!REFACTORED!] startGame 现在是唯一的开始/重置入口
             startGame() {
                 this.gameState = 'playing';
                 this.hideAllMenus();
@@ -725,7 +724,6 @@
                             if (game) game.startGame();
                         }
                     })
-                    // [!FIX!] 修复了此处的语法错误
                     .catch(error => {
                         console.error("请求陀螺仪权限失败:", error);
                         if (game) game.startGame();

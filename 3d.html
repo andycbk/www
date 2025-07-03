@@ -206,7 +206,6 @@
             color: #4ecdc4;
         }
 
-        /* [!NEW!] 新增：设置项样式 */
         .settings-container {
             margin-top: 20px;
             padding: 10px 20px;
@@ -287,7 +286,6 @@
             <button class="menu-btn" id="startBtn">开始游戏</button>
             <button class="menu-btn" id="calibrateBtn">校准陀螺仪</button>
             
-            <!-- [!NEW!] 新增：速度调节滑块 -->
             <div class="settings-container">
                 <div class="setting-item">
                     <label for="speedControl">控制灵敏度</label>
@@ -333,12 +331,12 @@
                 
                 this.gravity = -0.015;
                 this.ballVelocity = new THREE.Vector3(0, 0, 0);
-                this.friction = 0.97; // [!CHANGE!] 增加了摩擦力，让球不那么滑
+                this.friction = 0.97;
                 this.ballRadius = 0.5;
                 
                 this.gyroData = { x: 0, y: 0 };
                 this.gyroCalibration = { x: 0, y: 0 };
-                this.gyroSensitivity = 0.015; // [!CHANGE!] 降低了默认灵敏度
+                this.gyroSensitivity = 0.015;
                 
                 this.gameTimer = null;
                 
@@ -444,21 +442,20 @@
             }
             
             setupEventListeners() {
+                // [!REFACTORED!] 简化了按钮的事件绑定，都统一调用startGame
                 document.getElementById('pauseBtn').addEventListener('click', () => this.pauseGame());
-                document.getElementById('resetBtn').addEventListener('click', () => this.resetGame(true));
                 document.getElementById('resumeBtn').addEventListener('click', () => this.resumeGame());
-                document.getElementById('restartBtn').addEventListener('click', () => this.resetGame(true));
                 document.getElementById('mainMenuBtn').addEventListener('click', () => this.showMainMenu());
-                document.getElementById('playAgainBtn').addEventListener('click', () => this.resetGame(true));
                 document.getElementById('shareBtn').addEventListener('click', () => this.shareScore());
                 document.getElementById('calibrateBtn').addEventListener('click', () => this.calibrateGyroscope());
+
+                document.getElementById('resetBtn').addEventListener('click', () => this.startGame());
+                document.getElementById('restartBtn').addEventListener('click', () => this.startGame());
+                document.getElementById('playAgainBtn').addEventListener('click', () => this.startGame());
                 
                 window.addEventListener('resize', () => this.handleResize());
                 
-                // [!NEW!] 速度滑块的事件监听
                 const speedSlider = document.getElementById('speedControl');
-                
-                // 读取保存的设置
                 const savedSpeed = localStorage.getItem('gameSpeedSetting') || '40';
                 speedSlider.value = savedSpeed;
                 this.setSensitivityFromSlider(savedSpeed);
@@ -470,9 +467,7 @@
                 });
             }
 
-            // [!NEW!] 根据滑块值设置灵敏度的方法
             setSensitivityFromSlider(sliderValue) {
-                // 将滑块值 (10-100) 映射到灵敏度范围 (e.g., 0.005 - 0.025)
                 const minSens = 0.005;
                 const maxSens = 0.025;
                 this.gyroSensitivity = minSens + ((sliderValue - 10) / 90) * (maxSens - minSens);
@@ -491,11 +486,21 @@
                 alert('陀螺仪校准完成！请将当前姿势作为水平。');
             }
             
+            // [!REFACTORED!] startGame 现在是唯一的开始/重置入口
             startGame() {
-                if (this.gameState === 'playing') return;
                 this.gameState = 'playing';
                 this.hideAllMenus();
-                this.resetGame(false);
+
+                this.stopTimer();
+                this.score = 0;
+                this.timeLeft = 60;
+                this.lives = 3;
+                this.ball.position.set(0, 5, 0);
+                this.ballVelocity.set(0, 0, 0);
+                
+                this.createStars();
+                this.updateUI();
+                
                 this.startTimer();
             }
             
@@ -511,20 +516,6 @@
                 this.gameState = 'playing';
                 this.hideAllMenus();
                 this.startTimer();
-            }
-            
-            resetGame(startNew) {
-                this.stopTimer();
-                this.score = 0;
-                this.timeLeft = 60;
-                this.lives = 3;
-                this.ball.position.set(0, 5, 0);
-                this.ballVelocity.set(0, 0, 0);
-                this.createStars();
-                this.updateUI();
-                if (startNew) {
-                    this.startGame();
-                }
             }
             
             showMainMenu() {
@@ -734,7 +725,11 @@
                             if (game) game.startGame();
                         }
                     })
-                    .catch(() => if (game) game.startGame());
+                    // [!FIX!] 修复了此处的语法错误
+                    .catch(error => {
+                        console.error("请求陀螺仪权限失败:", error);
+                        if (game) game.startGame();
+                    });
             } else {
                 if (game) game.startGame();
             }

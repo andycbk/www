@@ -1,0 +1,804 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>3D滚球游戏</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        
+        :root {
+            --particle-tx: 0;
+            --particle-ty: 0;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            overflow: hidden;
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-touch-callout: none;
+        }
+        
+        #gameContainer {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+        }
+        
+        #gameCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(circle, #4facfe 0%, #00f2fe 100%);
+        }
+        
+        /* UI层 */
+        #gameUI {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 100;
+        }
+        
+        .ui-element {
+            pointer-events: auto;
+        }
+        
+        /* 顶部HUD */
+        #topHUD {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 80px;
+            background: linear-gradient(180deg, rgba(0,0,0,0.3) 0%, rgba(0,0,0,0) 100%);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 20px;
+            color: white;
+            font-weight: 500;
+        }
+        
+        .hud-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 16px;
+        }
+        
+        #score {
+            background: rgba(255,255,255,0.15);
+            padding: 8px 16px;
+            border-radius: 20px;
+            backdrop-filter: blur(10px);
+        }
+        
+        #timer {
+            background: rgba(255,107,107,0.9);
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-weight: 600;
+            font-size: 18px;
+        }
+        
+        #lives {
+            display: flex;
+            gap: 4px;
+        }
+        
+        .heart {
+            width: 20px;
+            height: 20px;
+            background: #ff4757;
+            position: relative;
+            transform: rotate(-45deg);
+        }
+        .heart::before,
+        .heart::after {
+            content: "";
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            background-color: #ff4757;
+            border-radius: 50%;
+        }
+        .heart::before {
+            top: -10px;
+            left: 0;
+        }
+        .heart::after {
+            top: 0;
+            left: 10px;
+        }
+        
+        /* 底部控制按钮 */
+        #bottomControls {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 100px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 20px;
+            background: linear-gradient(0deg, rgba(0,0,0,0.3) 0%, rgba(0,0,0,0) 100%);
+        }
+        
+        .control-btn {
+            width: 60px;
+            height: 60px;
+            border: none;
+            border-radius: 50%;
+            background: rgba(255,255,255,0.2);
+            backdrop-filter: blur(10px);
+            color: white;
+            font-size: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        }
+        
+        .control-btn:hover {
+            background: rgba(255,255,255,0.3);
+            transform: scale(1.1);
+        }
+        
+        .control-btn:active {
+            transform: scale(0.95);
+        }
+        
+        /* 游戏菜单 */
+        .menu {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.8);
+            backdrop-filter: blur(10px);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            text-align: center;
+            z-index: 200;
+        }
+        
+        .menu.hidden {
+            display: none;
+        }
+        
+        .menu h1 {
+            font-size: 48px;
+            font-weight: 700;
+            margin-bottom: 20px;
+            background: linear-gradient(45deg, #ff6b6b, #4ecdc4);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        .menu p {
+            font-size: 18px;
+            margin-bottom: 40px;
+            opacity: 0.8;
+        }
+        
+        .menu-btn {
+            padding: 16px 32px;
+            margin: 8px;
+            border: none;
+            border-radius: 25px;
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            color: white;
+            font-size: 18px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        }
+        
+        .menu-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0,0,0,0.3);
+        }
+        
+        .menu-btn:active {
+            transform: translateY(0);
+        }
+        
+        /* 游戏结束界面 */
+        #gameOverMenu .score-display {
+            font-size: 32px;
+            font-weight: 600;
+            margin: 20px 0;
+            color: #4ecdc4;
+        }
+        
+        /* 粒子效果 */
+        .particle {
+            position: absolute;
+            width: 4px;
+            height: 4px;
+            background: #ffd700;
+            border-radius: 50%;
+            pointer-events: none;
+            animation: particleFloat 1s ease-out forwards;
+        }
+        
+        @keyframes particleFloat {
+            0% {
+                transform: translate(var(--particle-tx), var(--particle-ty)) scale(1);
+                opacity: 1;
+            }
+            100% {
+                transform: translate(var(--particle-tx), calc(var(--particle-ty) - 50px)) scale(0);
+                opacity: 0;
+            }
+        }
+        
+        /* 响应式设计 */
+        @media (max-width: 480px) {
+            #topHUD {
+                height: 70px;
+                padding: 15px;
+            }
+            
+            .hud-item {
+                font-size: 14px;
+            }
+            
+            #timer {
+                font-size: 16px;
+            }
+            
+            .menu h1 {
+                font-size: 36px;
+            }
+            
+            .menu p {
+                font-size: 16px;
+            }
+            
+            .menu-btn {
+                padding: 14px 28px;
+                font-size: 16px;
+            }
+        }
+        
+        /* 加载动画 */
+        .loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            color: white;
+            z-index: 300;
+        }
+        
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid rgba(255,255,255,0.3);
+            border-top: 4px solid white;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <canvas id="gameCanvas"></canvas>
+        <div id="gameUI">
+            <div id="topHUD">
+                <div class="hud-item">
+                    <span>分数</span>
+                    <div id="score">0</div>
+                </div>
+                <div class="hud-item">
+                    <div id="timer">01:00</div>
+                </div>
+                <div class="hud-item">
+                    <div id="lives"></div>
+                </div>
+            </div>
+            <div id="bottomControls">
+                <button class="control-btn ui-element" id="pauseBtn">⏸</button>
+                <button class="control-btn ui-element" id="resetBtn">🔄</button>
+            </div>
+        </div>
+        <div id="startMenu" class="menu ui-element">
+            <h1>3D滚球游戏</h1>
+            <p>倾斜手机控制小球收集星星</p>
+            <button class="menu-btn" id="startBtn">开始游戏</button>
+            <button class="menu-btn" id="calibrateBtn">校准陀螺仪</button>
+        </div>
+        <div id="pauseMenu" class="menu ui-element hidden">
+            <h1>游戏暂停</h1>
+            <button class="menu-btn" id="resumeBtn">继续游戏</button>
+            <button class="menu-btn" id="restartBtn">重新开始</button>
+            <button class="menu-btn" id="mainMenuBtn">返回主菜单</button>
+        </div>
+        <div id="gameOverMenu" class="menu ui-element hidden">
+            <h1>游戏结束</h1>
+            <div class="score-display">得分: <span id="finalScore">0</span></div>
+            <div class="score-display">最高分: <span id="highScore">0</span></div>
+            <button class="menu-btn" id="playAgainBtn">再玩一次</button>
+            <button class="menu-btn" id="shareBtn">分享成绩</button>
+        </div>
+        <div id="loadingScreen" class="loading ui-element">
+            <div class="spinner"></div>
+            <p>正在加载游戏...</p>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        class BallGame {
+            constructor() {
+                this.scene = null;
+                this.camera = null;
+                this.renderer = null;
+                this.ball = null;
+                this.stars = [];
+                this.platforms = [];
+                
+                this.gameState = 'menu';
+                this.score = 0;
+                this.timeLeft = 60;
+                this.lives = 3;
+                this.highScore = localStorage.getItem('highScore') || 0;
+                
+                this.gravity = -0.015;
+                this.ballVelocity = new THREE.Vector3(0, 0, 0);
+                this.friction = 0.985;
+                this.ballRadius = 0.5;
+                
+                this.gyroData = { x: 0, y: 0 };
+                this.gyroCalibration = { x: 0, y: 0 };
+                this.gyroSensitivity = 0.025;
+                
+                this.gameTimer = null;
+                
+                this.init();
+            }
+            
+            init() {
+                this.setupScene();
+                this.setupLights();
+                this.createBall();
+                this.createLevel();
+                this.setupEventListeners();
+                this.setupGyroscope();
+                this.animate();
+                
+                document.getElementById('loadingScreen').style.display = 'none';
+                this.updateUI();
+            }
+            
+            setupScene() {
+                this.scene = new THREE.Scene();
+                this.scene.background = new THREE.Color(0x87CEEB);
+                this.scene.fog = new THREE.Fog(0x87CEEB, 20, 80);
+                
+                this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+                this.camera.position.set(0, 15, 10);
+                
+                const canvas = document.getElementById('gameCanvas');
+                this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+                this.renderer.setSize(window.innerWidth, window.innerHeight);
+                this.renderer.shadowMap.enabled = true;
+                this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            }
+            
+            setupLights() {
+                const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+                this.scene.add(ambientLight);
+                
+                const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+                directionalLight.position.set(10, 20, 5);
+                directionalLight.castShadow = true;
+                directionalLight.shadow.mapSize.width = 2048;
+                directionalLight.shadow.mapSize.height = 2048;
+                directionalLight.shadow.camera.left = -25;
+                directionalLight.shadow.camera.right = 25;
+                directionalLight.shadow.camera.top = 25;
+                directionalLight.shadow.camera.bottom = -25;
+                this.scene.add(directionalLight);
+            }
+            
+            createBall() {
+                const ballGeometry = new THREE.SphereGeometry(this.ballRadius, 32, 32);
+                const ballMaterial = new THREE.MeshPhongMaterial({ color: 0xff4757 });
+                this.ball = new THREE.Mesh(ballGeometry, ballMaterial);
+                this.ball.castShadow = true;
+                this.scene.add(this.ball);
+            }
+            
+            createLevel() {
+                this.platforms.forEach(p => this.scene.remove(p));
+                this.platforms = [];
+                
+                const platformData = [
+                    { x: 0, y: 0, z: 0, w: 20, d: 20 },
+                    { x: 15, y: 1, z: 5, w: 8, d: 8 },
+                    { x: -10, y: 0.5, z: -15, w: 10, d: 10 },
+                    { x: 5, y: 2, z: 18, w: 6, d: 6 },
+                ];
+
+                platformData.forEach(p => {
+                    this.createPlatform(p.x, p.y, p.z, p.w, 1, p.d, 0x4facfe);
+                });
+                
+                this.createStars();
+            }
+
+            createPlatform(x, y, z, width, height, depth, color) {
+                const geometry = new THREE.BoxGeometry(width, height, depth);
+                const material = new THREE.MeshPhongMaterial({ color });
+                const platform = new THREE.Mesh(geometry, material);
+                platform.position.set(x, y, z);
+                platform.receiveShadow = true;
+                this.scene.add(platform);
+                this.platforms.push(platform);
+            }
+            
+            createStars() {
+                this.stars.forEach(s => this.scene.remove(s));
+                this.stars = [];
+                const starGeometry = new THREE.IcosahedronGeometry(0.4, 0);
+                const starMaterial = new THREE.MeshPhongMaterial({ color: 0xffd700, emissive: 0x665500 });
+                
+                for (let i = 0; i < 15; i++) {
+                    const star = new THREE.Mesh(starGeometry, starMaterial);
+                    const platform = this.platforms[Math.floor(Math.random() * this.platforms.length)];
+                    const platformSize = new THREE.Box3().setFromObject(platform).getSize(new THREE.Vector3());
+                    star.position.set(
+                        platform.position.x + (Math.random() - 0.5) * platformSize.x * 0.8,
+                        platform.position.y + 1.5,
+                        platform.position.z + (Math.random() - 0.5) * platformSize.z * 0.8
+                    );
+                    star.castShadow = true;
+                    this.scene.add(star);
+                    this.stars.push(star);
+                }
+            }
+            
+            setupEventListeners() {
+                document.getElementById('pauseBtn').addEventListener('click', () => this.pauseGame());
+                document.getElementById('resetBtn').addEventListener('click', () => this.resetGame(true));
+                document.getElementById('resumeBtn').addEventListener('click', () => this.resumeGame());
+                document.getElementById('restartBtn').addEventListener('click', () => this.resetGame(true));
+                document.getElementById('mainMenuBtn').addEventListener('click', () => this.showMainMenu());
+                document.getElementById('playAgainBtn').addEventListener('click', () => this.resetGame(true));
+                document.getElementById('shareBtn').addEventListener('click', () => this.shareScore());
+                document.getElementById('calibrateBtn').addEventListener('click', () => this.calibrateGyroscope());
+                
+                window.addEventListener('resize', () => this.handleResize());
+            }
+            
+            setupGyroscope() {
+                const handleOrientation = (e) => {
+                    this.gyroData.x = e.gamma || 0; // Left-to-right tilt
+                    this.gyroData.y = e.beta || 0;  // Front-to-back tilt
+                };
+                window.addEventListener('deviceorientation', handleOrientation);
+            }
+            
+            calibrateGyroscope() {
+                this.gyroCalibration.x = this.gyroData.x;
+                this.gyroCalibration.y = this.gyroData.y;
+                alert('陀螺仪校准完成！请将当前姿势作为水平。');
+            }
+            
+            startGame() {
+                if (this.gameState === 'playing') return;
+                this.gameState = 'playing';
+                this.hideAllMenus();
+                this.resetGame(false);
+                this.startTimer();
+            }
+            
+            pauseGame() {
+                if (this.gameState !== 'playing') return;
+                this.gameState = 'paused';
+                this.showMenu('pauseMenu');
+                this.stopTimer();
+            }
+            
+            resumeGame() {
+                if (this.gameState !== 'paused') return;
+                this.gameState = 'playing';
+                this.hideAllMenus();
+                this.startTimer();
+            }
+            
+            resetGame(startNew) {
+                this.stopTimer();
+                this.score = 0;
+                this.timeLeft = 60;
+                this.lives = 3;
+                this.ball.position.set(0, 5, 0);
+                this.ballVelocity.set(0, 0, 0);
+                this.createStars();
+                this.updateUI();
+                if (startNew) {
+                    this.startGame();
+                }
+            }
+            
+            showMainMenu() {
+                this.gameState = 'menu';
+                this.hideAllMenus();
+                this.showMenu('startMenu');
+                this.stopTimer();
+            }
+            
+            gameOver() {
+                this.gameState = 'gameOver';
+                this.stopTimer();
+                if (this.score > this.highScore) {
+                    this.highScore = this.score;
+                    localStorage.setItem('highScore', this.highScore);
+                }
+                document.getElementById('finalScore').textContent = this.score;
+                document.getElementById('highScore').textContent = this.highScore;
+                this.showMenu('gameOverMenu');
+            }
+            
+            startTimer() {
+                this.stopTimer();
+                this.gameTimer = setInterval(() => {
+                    this.timeLeft--;
+                    this.updateUI();
+                    if (this.timeLeft <= 0) {
+                        this.gameOver();
+                    }
+                }, 1000);
+            }
+            
+            stopTimer() {
+                clearInterval(this.gameTimer);
+            }
+            
+            updateUI() {
+                document.getElementById('score').textContent = this.score;
+                const minutes = Math.floor(this.timeLeft / 60).toString().padStart(2, '0');
+                const seconds = (this.timeLeft % 60).toString().padStart(2, '0');
+                document.getElementById('timer').textContent = `${minutes}:${seconds}`;
+                
+                const livesContainer = document.getElementById('lives');
+                livesContainer.innerHTML = '';
+                for (let i = 0; i < this.lives; i++) {
+                    const heart = document.createElement('div');
+                    heart.className = 'heart';
+                    livesContainer.appendChild(heart);
+                }
+            }
+            
+            showMenu(id) { document.getElementById(id).classList.remove('hidden'); }
+            hideAllMenus() { document.querySelectorAll('.menu').forEach(m => m.classList.add('hidden')); }
+            
+            shareScore() {
+                const text = `我在3D滚球游戏中得了${this.score}分！你也来试试？`;
+                if (navigator.share) {
+                    navigator.share({ title: '3D滚球游戏', text, url: window.location.href });
+                } else {
+                    navigator.clipboard.writeText(text).then(() => alert('成绩已复制到剪贴板！'));
+                }
+            }
+            
+            update() {
+                if (this.gameState !== 'playing') return;
+                
+                this.updateBallPhysics();
+                this.checkCollisions();
+                this.updateCamera();
+                this.updateStars();
+            }
+            
+            updateBallPhysics() {
+                const Gx = (this.gyroData.x - this.gyroCalibration.x) * this.gyroSensitivity;
+                const Gz = (this.gyroData.y - this.gyroCalibration.y) * this.gyroSensitivity;
+
+                const acceleration = new THREE.Vector3(Gx, this.gravity, Gz);
+                this.ballVelocity.add(acceleration);
+                this.ballVelocity.multiplyScalar(this.friction);
+                this.ball.position.add(this.ballVelocity);
+
+                if (this.ball.position.y < -20) {
+                    this.handleBallFall();
+                }
+            }
+            
+            checkCollisions() {
+                let onPlatform = false;
+                for (const platform of this.platforms) {
+                    const pBox = new THREE.Box3().setFromObject(platform);
+                    if (this.ball.position.x > pBox.min.x - this.ballRadius && this.ball.position.x < pBox.max.x + this.ballRadius &&
+                        this.ball.position.z > pBox.min.z - this.ballRadius && this.ball.position.z < pBox.max.z + this.ballRadius) {
+                        
+                        const ballBottom = this.ball.position.y - this.ballRadius;
+                        if (ballBottom < pBox.max.y && this.ball.position.y > pBox.min.y) {
+                            onPlatform = true;
+                            this.ballVelocity.y = 0;
+                            this.ball.position.y = pBox.max.y + this.ballRadius;
+                            break;
+                        }
+                    }
+                }
+                
+                for (let i = this.stars.length - 1; i >= 0; i--) {
+                    const star = this.stars[i];
+                    if (this.ball.position.distanceTo(star.position) < this.ballRadius + 0.4) {
+                        this.collectStar(star, i);
+                    }
+                }
+            }
+            
+            collectStar(star, index) {
+                this.score += 10;
+                this.createParticleEffect(star.position);
+                this.scene.remove(star);
+                this.stars.splice(index, 1);
+                this.playCollectSound();
+                this.updateUI();
+                if (this.stars.length === 0) {
+                    this.score += 50;
+                    this.createStars();
+                }
+            }
+
+            worldToScreen(worldPos) {
+                const vector = worldPos.clone().project(this.camera);
+                vector.x = (vector.x + 1) / 2 * window.innerWidth;
+                vector.y = -(vector.y - 1) / 2 * window.innerHeight;
+                return vector;
+            }
+
+            createParticleEffect(position) {
+                const screenPos = this.worldToScreen(position);
+                for (let i = 0; i < 8; i++) {
+                    const p = document.createElement('div');
+                    p.className = 'particle';
+                    p.style.left = `${screenPos.x}px`;
+                    p.style.top = `${screenPos.y}px`;
+                    p.style.setProperty('--particle-tx', `${(Math.random() - 0.5) * 40}px`);
+                    p.style.setProperty('--particle-ty', `${(Math.random() - 0.5) * 40}px`);
+                    document.getElementById('gameContainer').appendChild(p);
+                    setTimeout(() => p.remove(), 1000);
+                }
+            }
+            
+            playCollectSound() {
+                const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                if (!audioContext) return;
+                const osc = audioContext.createOscillator();
+                const gain = audioContext.createGain();
+                osc.connect(gain);
+                gain.connect(audioContext.destination);
+                osc.frequency.setValueAtTime(800, audioContext.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(1200, audioContext.currentTime + 0.1);
+                gain.gain.setValueAtTime(0.1, audioContext.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.1);
+                osc.start();
+                osc.stop(audioContext.currentTime + 0.1);
+            }
+            
+            handleBallFall() {
+                this.lives--;
+                this.updateUI();
+                if (this.lives <= 0) {
+                    this.gameOver();
+                } else {
+                    this.ball.position.set(0, 5, 0);
+                    this.ballVelocity.set(0, 0, 0);
+                    if (navigator.vibrate) navigator.vibrate(150);
+                }
+            }
+            
+            updateCamera() {
+                const targetPosition = new THREE.Vector3(
+                    this.ball.position.x, 
+                    this.ball.position.y + 12, 
+                    this.ball.position.z + 9
+                );
+                this.camera.position.lerp(targetPosition, 0.1);
+                this.camera.lookAt(this.ball.position);
+            }
+            
+            updateStars() {
+                const time = Date.now() * 0.002;
+                this.stars.forEach(star => {
+                    star.rotation.y += 0.02;
+                    star.position.y += Math.sin(time + star.position.x) * 0.003;
+                });
+            }
+            
+            handleResize() {
+                this.camera.aspect = window.innerWidth / window.innerHeight;
+                this.camera.updateProjectionMatrix();
+                this.renderer.setSize(window.innerWidth, window.innerHeight);
+            }
+            
+            animate() {
+                requestAnimationFrame(() => this.animate());
+                this.update();
+                this.renderer.render(this.scene, this.camera);
+            }
+        }
+        
+        let game;
+
+        function handleStartClick() {
+            // 检查是否是需要请求权限的设备 (iOS 13+ / 部分安卓)
+            if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+                DeviceOrientationEvent.requestPermission()
+                    .then(permissionState => {
+                        if (permissionState === 'granted') {
+                            console.log('陀螺仪权限已获得');
+                            if (game) game.startGame();
+                        } else {
+                            console.warn('陀螺仪权限被拒绝');
+                            alert('陀螺仪权限被拒绝。在电脑上您仍可使用键盘方向键（如果已实现）。');
+                            if (game) game.startGame(); // 即使拒绝，也开始游戏，允许键盘控制
+                        }
+                    })
+                    .catch(error => {
+                        console.error('请求陀螺仪权限时出错:', error);
+                        // 在某些非HTTPS环境或浏览器中，此请求会立即失败
+                        if (game) game.startGame();
+                    });
+            } else {
+                // 对于不需要显式请求权限的设备（大多数安卓/桌面），直接开始
+                if (game) game.startGame();
+            }
+        }
+
+        window.addEventListener('load', () => {
+            game = new BallGame();
+            document.getElementById('startBtn').addEventListener('click', handleStartClick);
+        });
+
+        // 键盘控制作为备用
+        document.addEventListener('keydown', (e) => {
+            if (!game || game.gameState !== 'playing') return;
+            const force = 0.5;
+            switch(e.key) {
+                case 'ArrowUp': game.ballVelocity.z -= force; break;
+                case 'ArrowDown': game.ballVelocity.z += force; break;
+                case 'ArrowLeft': game.ballVelocity.x -= force; break;
+                case 'ArrowRight': game.ballVelocity.x += force; break;
+            }
+        });
+
+    </script>
+</body>
+</html>

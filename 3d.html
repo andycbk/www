@@ -43,7 +43,6 @@
             background: radial-gradient(circle, #4facfe 0%, #00f2fe 100%);
         }
         
-        /* UI层 */
         #gameUI {
             position: absolute;
             top: 0;
@@ -58,7 +57,6 @@
             pointer-events: auto;
         }
         
-        /* 顶部HUD */
         #topHUD {
             position: absolute;
             top: 0;
@@ -98,7 +96,8 @@
         
         #lives {
             display: flex;
-            gap: 4px;
+            gap: 8px;
+            align-items: center;
         }
         
         .heart {
@@ -117,16 +116,9 @@
             background-color: #ff4757;
             border-radius: 50%;
         }
-        .heart::before {
-            top: -10px;
-            left: 0;
-        }
-        .heart::after {
-            top: 0;
-            left: 10px;
-        }
+        .heart::before { top: -10px; left: 0; }
+        .heart::after { top: 0; left: 10px; }
         
-        /* 底部控制按钮 */
         #bottomControls {
             position: absolute;
             bottom: 0;
@@ -157,22 +149,13 @@
             box-shadow: 0 4px 15px rgba(0,0,0,0.2);
         }
         
-        .control-btn:hover {
-            background: rgba(255,255,255,0.3);
-            transform: scale(1.1);
-        }
+        .control-btn:hover { background: rgba(255,255,255,0.3); transform: scale(1.1); }
+        .control-btn:active { transform: scale(0.95); }
         
-        .control-btn:active {
-            transform: scale(0.95);
-        }
-        
-        /* 游戏菜单 */
         .menu {
             position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
             background: rgba(0,0,0,0.8);
             backdrop-filter: blur(10px);
             display: flex;
@@ -182,11 +165,10 @@
             color: white;
             text-align: center;
             z-index: 200;
+            transition: opacity 0.3s ease;
         }
         
-        .menu.hidden {
-            display: none;
-        }
+        .menu.hidden { display: none; }
         
         .menu h1 {
             font-size: 48px;
@@ -198,11 +180,7 @@
             background-clip: text;
         }
         
-        .menu p {
-            font-size: 18px;
-            margin-bottom: 40px;
-            opacity: 0.8;
-        }
+        .menu p { font-size: 18px; margin-bottom: 20px; opacity: 0.8; }
         
         .menu-btn {
             padding: 16px 32px;
@@ -218,98 +196,73 @@
             box-shadow: 0 4px 15px rgba(0,0,0,0.2);
         }
         
-        .menu-btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(0,0,0,0.3);
-        }
+        .menu-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(0,0,0,0.3); }
+        .menu-btn:active { transform: translateY(0); }
         
-        .menu-btn:active {
-            transform: translateY(0);
-        }
-        
-        /* 游戏结束界面 */
         #gameOverMenu .score-display {
             font-size: 32px;
             font-weight: 600;
             margin: 20px 0;
             color: #4ecdc4;
         }
+
+        /* [!NEW!] 新增：设置项样式 */
+        .settings-container {
+            margin-top: 20px;
+            padding: 10px 20px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 15px;
+            width: 80%;
+            max-width: 300px;
+        }
+        .setting-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin: 10px 0;
+        }
+        .setting-item label {
+            font-size: 16px;
+            opacity: 0.9;
+        }
+        input[type="range"] {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 60%;
+            height: 8px;
+            background: rgba(0,0,0,0.3);
+            border-radius: 5px;
+            outline: none;
+            cursor: pointer;
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            background: #4ecdc4;
+            border-radius: 50%;
+            border: 2px solid white;
+        }
+        input[type="range"]::-moz-range-thumb {
+            width: 20px;
+            height: 20px;
+            background: #4ecdc4;
+            border-radius: 50%;
+            border: 2px solid white;
+        }
         
-        /* 粒子效果 */
         .particle {
             position: absolute;
-            width: 4px;
-            height: 4px;
+            width: 4px; height: 4px;
             background: #ffd700;
             border-radius: 50%;
             pointer-events: none;
             animation: particleFloat 1s ease-out forwards;
         }
-        
         @keyframes particleFloat {
-            0% {
-                transform: translate(var(--particle-tx), var(--particle-ty)) scale(1);
-                opacity: 1;
-            }
-            100% {
-                transform: translate(var(--particle-tx), calc(var(--particle-ty) - 50px)) scale(0);
-                opacity: 0;
-            }
-        }
-        
-        /* 响应式设计 */
-        @media (max-width: 480px) {
-            #topHUD {
-                height: 70px;
-                padding: 15px;
-            }
-            
-            .hud-item {
-                font-size: 14px;
-            }
-            
-            #timer {
-                font-size: 16px;
-            }
-            
-            .menu h1 {
-                font-size: 36px;
-            }
-            
-            .menu p {
-                font-size: 16px;
-            }
-            
-            .menu-btn {
-                padding: 14px 28px;
-                font-size: 16px;
-            }
-        }
-        
-        /* 加载动画 */
-        .loading {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            text-align: center;
-            color: white;
-            z-index: 300;
-        }
-        
-        .spinner {
-            width: 40px;
-            height: 40px;
-            border: 4px solid rgba(255,255,255,0.3);
-            border-top: 4px solid white;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-            margin: 0 auto 20px;
-        }
-        
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
+            0% { transform: translate(var(--particle-tx), var(--particle-ty)) scale(1); opacity: 1; }
+            100% { transform: translate(var(--particle-tx), calc(var(--particle-ty) - 50px)) scale(0); opacity: 0; }
         }
     </style>
 </head>
@@ -318,28 +271,31 @@
         <canvas id="gameCanvas"></canvas>
         <div id="gameUI">
             <div id="topHUD">
-                <div class="hud-item">
-                    <span>分数</span>
-                    <div id="score">0</div>
-                </div>
-                <div class="hud-item">
-                    <div id="timer">01:00</div>
-                </div>
-                <div class="hud-item">
-                    <div id="lives"></div>
-                </div>
+                <div class="hud-item"><span>分数</span><div id="score">0</div></div>
+                <div class="hud-item"><div id="timer">01:00</div></div>
+                <div class="hud-item"><div id="lives"></div></div>
             </div>
             <div id="bottomControls">
                 <button class="control-btn ui-element" id="pauseBtn">⏸</button>
                 <button class="control-btn ui-element" id="resetBtn">🔄</button>
             </div>
         </div>
+        
         <div id="startMenu" class="menu ui-element">
             <h1>3D滚球游戏</h1>
             <p>倾斜手机控制小球收集星星</p>
             <button class="menu-btn" id="startBtn">开始游戏</button>
             <button class="menu-btn" id="calibrateBtn">校准陀螺仪</button>
+            
+            <!-- [!NEW!] 新增：速度调节滑块 -->
+            <div class="settings-container">
+                <div class="setting-item">
+                    <label for="speedControl">控制灵敏度</label>
+                    <input type="range" id="speedControl" min="10" max="100" value="50">
+                </div>
+            </div>
         </div>
+
         <div id="pauseMenu" class="menu ui-element hidden">
             <h1>游戏暂停</h1>
             <button class="menu-btn" id="resumeBtn">继续游戏</button>
@@ -354,8 +310,7 @@
             <button class="menu-btn" id="shareBtn">分享成绩</button>
         </div>
         <div id="loadingScreen" class="loading ui-element">
-            <div class="spinner"></div>
-            <p>正在加载游戏...</p>
+            <div class="spinner"></div><p>正在加载游戏...</p>
         </div>
     </div>
 
@@ -378,12 +333,12 @@
                 
                 this.gravity = -0.015;
                 this.ballVelocity = new THREE.Vector3(0, 0, 0);
-                this.friction = 0.985;
+                this.friction = 0.97; // [!CHANGE!] 增加了摩擦力，让球不那么滑
                 this.ballRadius = 0.5;
                 
                 this.gyroData = { x: 0, y: 0 };
                 this.gyroCalibration = { x: 0, y: 0 };
-                this.gyroSensitivity = 0.025;
+                this.gyroSensitivity = 0.015; // [!CHANGE!] 降低了默认灵敏度
                 
                 this.gameTimer = null;
                 
@@ -454,22 +409,19 @@
                 ];
 
                 platformData.forEach(p => {
-                    this.createPlatform(p.x, p.y, p.z, p.w, 1, p.d, 0x4facfe);
+                    const platform = new THREE.Mesh(
+                        new THREE.BoxGeometry(p.w, 1, p.d),
+                        new THREE.MeshPhongMaterial({ color: 0x4facfe })
+                    );
+                    platform.position.set(p.x, p.y, p.z);
+                    platform.receiveShadow = true;
+                    this.scene.add(platform);
+                    this.platforms.push(platform);
                 });
                 
                 this.createStars();
             }
 
-            createPlatform(x, y, z, width, height, depth, color) {
-                const geometry = new THREE.BoxGeometry(width, height, depth);
-                const material = new THREE.MeshPhongMaterial({ color });
-                const platform = new THREE.Mesh(geometry, material);
-                platform.position.set(x, y, z);
-                platform.receiveShadow = true;
-                this.scene.add(platform);
-                this.platforms.push(platform);
-            }
-            
             createStars() {
                 this.stars.forEach(s => this.scene.remove(s));
                 this.stars = [];
@@ -502,14 +454,35 @@
                 document.getElementById('calibrateBtn').addEventListener('click', () => this.calibrateGyroscope());
                 
                 window.addEventListener('resize', () => this.handleResize());
+                
+                // [!NEW!] 速度滑块的事件监听
+                const speedSlider = document.getElementById('speedControl');
+                
+                // 读取保存的设置
+                const savedSpeed = localStorage.getItem('gameSpeedSetting') || '40';
+                speedSlider.value = savedSpeed;
+                this.setSensitivityFromSlider(savedSpeed);
+                
+                speedSlider.addEventListener('input', (e) => {
+                    const value = e.target.value;
+                    this.setSensitivityFromSlider(value);
+                    localStorage.setItem('gameSpeedSetting', value);
+                });
+            }
+
+            // [!NEW!] 根据滑块值设置灵敏度的方法
+            setSensitivityFromSlider(sliderValue) {
+                // 将滑块值 (10-100) 映射到灵敏度范围 (e.g., 0.005 - 0.025)
+                const minSens = 0.005;
+                const maxSens = 0.025;
+                this.gyroSensitivity = minSens + ((sliderValue - 10) / 90) * (maxSens - minSens);
             }
             
             setupGyroscope() {
-                const handleOrientation = (e) => {
-                    this.gyroData.x = e.gamma || 0; // Left-to-right tilt
-                    this.gyroData.y = e.beta || 0;  // Front-to-back tilt
-                };
-                window.addEventListener('deviceorientation', handleOrientation);
+                window.addEventListener('deviceorientation', (e) => {
+                    this.gyroData.x = e.gamma || 0;
+                    this.gyroData.y = e.beta || 0;
+                });
             }
             
             calibrateGyroscope() {
@@ -584,9 +557,7 @@
                 }, 1000);
             }
             
-            stopTimer() {
-                clearInterval(this.gameTimer);
-            }
+            stopTimer() { clearInterval(this.gameTimer); }
             
             updateUI() {
                 document.getElementById('score').textContent = this.score;
@@ -597,9 +568,7 @@
                 const livesContainer = document.getElementById('lives');
                 livesContainer.innerHTML = '';
                 for (let i = 0; i < this.lives; i++) {
-                    const heart = document.createElement('div');
-                    heart.className = 'heart';
-                    livesContainer.appendChild(heart);
+                    livesContainer.innerHTML += '<div class="heart"></div>';
                 }
             }
             
@@ -610,14 +579,13 @@
                 const text = `我在3D滚球游戏中得了${this.score}分！你也来试试？`;
                 if (navigator.share) {
                     navigator.share({ title: '3D滚球游戏', text, url: window.location.href });
-                } else {
+                } else if (navigator.clipboard) {
                     navigator.clipboard.writeText(text).then(() => alert('成绩已复制到剪贴板！'));
                 }
             }
             
             update() {
                 if (this.gameState !== 'playing') return;
-                
                 this.updateBallPhysics();
                 this.checkCollisions();
                 this.updateCamera();
@@ -639,15 +607,13 @@
             }
             
             checkCollisions() {
-                let onPlatform = false;
                 for (const platform of this.platforms) {
                     const pBox = new THREE.Box3().setFromObject(platform);
                     if (this.ball.position.x > pBox.min.x - this.ballRadius && this.ball.position.x < pBox.max.x + this.ballRadius &&
                         this.ball.position.z > pBox.min.z - this.ballRadius && this.ball.position.z < pBox.max.z + this.ballRadius) {
                         
                         const ballBottom = this.ball.position.y - this.ballRadius;
-                        if (ballBottom < pBox.max.y && this.ball.position.y > pBox.min.y) {
-                            onPlatform = true;
+                        if (ballBottom < pBox.max.y && this.ball.position.y > pBox.min.y && this.ballVelocity.y < 0) {
                             this.ballVelocity.y = 0;
                             this.ball.position.y = pBox.max.y + this.ballRadius;
                             break;
@@ -758,26 +724,18 @@
         let game;
 
         function handleStartClick() {
-            // 检查是否是需要请求权限的设备 (iOS 13+ / 部分安卓)
             if (typeof DeviceOrientationEvent.requestPermission === 'function') {
                 DeviceOrientationEvent.requestPermission()
                     .then(permissionState => {
                         if (permissionState === 'granted') {
-                            console.log('陀螺仪权限已获得');
                             if (game) game.startGame();
                         } else {
-                            console.warn('陀螺仪权限被拒绝');
-                            alert('陀螺仪权限被拒绝。在电脑上您仍可使用键盘方向键（如果已实现）。');
-                            if (game) game.startGame(); // 即使拒绝，也开始游戏，允许键盘控制
+                            alert('陀螺仪权限被拒绝。');
+                            if (game) game.startGame();
                         }
                     })
-                    .catch(error => {
-                        console.error('请求陀螺仪权限时出错:', error);
-                        // 在某些非HTTPS环境或浏览器中，此请求会立即失败
-                        if (game) game.startGame();
-                    });
+                    .catch(() => if (game) game.startGame());
             } else {
-                // 对于不需要显式请求权限的设备（大多数安卓/桌面），直接开始
                 if (game) game.startGame();
             }
         }
@@ -785,18 +743,6 @@
         window.addEventListener('load', () => {
             game = new BallGame();
             document.getElementById('startBtn').addEventListener('click', handleStartClick);
-        });
-
-        // 键盘控制作为备用
-        document.addEventListener('keydown', (e) => {
-            if (!game || game.gameState !== 'playing') return;
-            const force = 0.5;
-            switch(e.key) {
-                case 'ArrowUp': game.ballVelocity.z -= force; break;
-                case 'ArrowDown': game.ballVelocity.z += force; break;
-                case 'ArrowLeft': game.ballVelocity.x -= force; break;
-                case 'ArrowRight': game.ballVelocity.x += force; break;
-            }
         });
 
     </script>

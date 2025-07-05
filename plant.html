@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>太空射擊：十重關卡</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { background-color: #000; overflow: hidden; touch-action: none; font-family: 'Monaco', 'Menlo', 'monospace'; color: #E0E0E0; }
+        #game-container { position: fixed; top: 0; left: 0; width: 100%; height: 100%; }
+        #game-canvas { display: block; width: 100%; height: 100%; background-color: #0c0c1a; }
+        #ui-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; display: flex; flex-direction: column; justify-content: center; align-items: center; }
+        #info-panel { position: absolute; top: 20px; left: 20px; right: 20px; display: flex; justify-content: space-between; font-size: 18px; text-shadow: 0 0 5px #fff; }
+        #score, #level-progress, #lives { flex: 1; }
+        #score { text-align: left; }
+        #level-progress { text-align: center; }
+        #lives { text-align: right; }
+        #message-box { color: white; text-align: center; background-color: rgba(0, 0, 0, 0.75); padding: 30px; border-radius: 15px; border: 2px solid #444; max-width: 90%; line-height: 1.6; }
+        .message-title { font-size: 28px; margin-bottom: 15px; color: #61dafb; }
+        .message-text { font-size: 16px; margin-bottom: 20px; }
+        .button-group { display: flex; gap: 15px; justify-content: center; }
+        .ui-btn { padding: 15px 30px; font-size: 18px; font-family: inherit; color: white; border: 2px solid #fff; border-radius: 10px; cursor: pointer; pointer-events: auto; text-transform: uppercase; transition: all 0.2s ease; margin-top: 10px; background: transparent; text-shadow: 0 0 8px #fff; }
+        .ui-btn:hover { background-color: #fff; color: #000; box-shadow: 0 0 20px #fff; }
+        .ui-btn:active { transform: scale(0.95); }
+        .btn-primary { background-color: #3498db; border-color: #3498db; }
+        .btn-success { background-color: #4CAF50; border-color: #4CAF50; }
+        .btn-danger { background-color: #e74c3c; border-color: #e74c3c; }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <canvas id="game-canvas"></canvas>
+        <div id="ui-overlay">
+            <div id="info-panel" style="display: none;">
+                <div id="score">分數: 0</div>
+                <div id="level-progress">關卡 1: 0/10</div>
+                <div id="lives">生命: 10</div>
+            </div>
+            <div id="message-box">
+                <div id="message-title">控制方式</div>
+                <div id="message-text">請選擇你的遊戲控制方式</div>
+                <div class="button-group">
+                    <button id="gyro-btn" class="ui-btn btn-primary">陀螺儀</button>
+                    <button id="touch-btn" class="ui-btn btn-primary">觸控螢幕</button>
+                </div>
+                <div id="permission-request" style="display: none; margin-top: 15px;">
+                    <button id="permission-btn" class="ui-btn btn-success">允許陀螺儀權限</button>
+                </div>
+                <div id="instructions" style="display: none; margin-top: 15px;">
+                     <div id="instructions-text" class="message-text"></div>
+                     <button id="start-btn" class="ui-btn btn-success">開始遊戲</button>
+                </div>
+                <div id="game-over-box" style="display: none;">
+                    <button id="restart-btn" class="ui-btn btn-danger">重新開始</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- 遊戲設定 ---
+        const GAME_SETTINGS = {
+            PLAYER_MAX_SPEED: 7,
+            LIVES_START_COUNT: 10,
+            GYRO_SENSITIVITY: 0.6,
+            INVINCIBILITY_DURATION: 180, // 3秒 (60fps * 3)
+            LEVEL_TRANSITION_DELAY: 3000, // 3秒
+        };
+
+        const LEVEL_CONFIG = [
+            // Level 1-10
+            { enemiesToClear: 10, spawnInterval: 1000, maxSpeed: 2.0, trackerChance: 0.0 },
+            { enemiesToClear: 15, spawnInterval: 900,  maxSpeed: 2.5, trackerChance: 0.1 },
+            { enemiesToClear: 20, spawnInterval: 800,  maxSpeed: 3.0, trackerChance: 0.15 },
+            { enemiesToClear: 25, spawnInterval: 700,  maxSpeed: 3.5, trackerChance: 0.2 },
+            { enemiesToClear: 30, spawnInterval: 650,  maxSpeed: 4.0, trackerChance: 0.25 },
+            { enemiesToClear: 35, spawnInterval: 600,  maxSpeed: 4.5, trackerChance: 0.3 },
+            { enemiesToClear: 40, spawnInterval: 550,  maxSpeed: 5.0, trackerChance: 0.35 },
+            { enemiesToClear: 45, spawnInterval: 500,  maxSpeed: 5.5, trackerChance: 0.4 },
+            { enemiesToClear: 50, spawnInterval: 450,  maxSpeed: 6.0, trackerChance: 0.45 },
+            { enemiesToClear: 60, spawnInterval: 400,  maxSpeed: 6.5, trackerChance: 0.5 },
+        ];
+
+        // --- DOM 元素 ---
+        const canvas = document.getElementById('game-canvas');
+        const ctx = canvas.getContext('2d');
+        const messageBox = document.getElementById('message-box');
+        const messageTitle = document.getElementById('message-title');
+        const messageText = document.getElementById('message-text');
+        const infoPanel = document.getElementById('info-panel');
+        const scoreElement = document.getElementById('score');
+        const levelProgressElement = document.getElementById('level-progress');
+        const livesElement = document.getElementById('lives');
+        const gyroBtn = document.getElementById('gyro-btn');
+        const touchBtn = document.getElementById('touch-btn');
+        const permissionRequest = document.getElementById('permission-request');
+        const permissionBtn = document.getElementById('permission-btn');
+        const instructions = document.getElementById('instructions');
+        const instructionsText = document.getElementById('instructions-text');
+        const startBtn = document.getElementById('start-btn');
+        const gameOverBox = document.getElementById('game-over-box');
+        const restartBtn = document.getElementById('restart-btn');
+
+        // --- 遊戲狀態 ---
+        const gameState = {
+            started: false, score: 0, lives: GAME_SETTINGS.LIVES_START_COUNT,
+            currentLevel: 1, enemiesKilledThisLevel: 0,
+            gameOver: false, isLevelTransition: false,
+            animationId: null, lastEnemySpawnTime: 0, lastBulletTime: 0,
+            controlScheme: null, // 'gyro' or 'touch'
+            touchDirection: null, // 'left', 'right', or null
+            isShooting: false,
+        };
+
+        // --- 遊戲物件 ---
+        const player = { x: 0, y: 0, width: 50, height: 60, isInvincible: false, invincibleTimer: 0 };
+        const bullets = [], enemies = [], particles = [], stars = [];
+
+        // --- 初始化 & 視窗大小 ---
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            player.x = canvas.width / 2;
+            player.y = canvas.height - 100;
+            initStars();
+        }
+        window.addEventListener('resize', resizeCanvas);
+
+        // --- 星空背景 ---
+        function initStars() {
+            stars.length = 0;
+            for (let i = 0; i < 150; i++) { stars.push({ x: Math.random() * canvas.width, y: Math.random() * canvas.height, radius: Math.random() * 1.5, speed: Math.random() * 0.5 + 0.2 }); }
+        }
+        function drawStars() {
+            ctx.fillStyle = '#FFF';
+            for (const star of stars) {
+                star.y += star.speed;
+                if (star.y > canvas.height) { star.y = 0; star.x = Math.random() * canvas.width; }
+                ctx.beginPath();
+                ctx.arc(star.x, star.y, star.radius, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+        
+        // --- 控制方式選擇與設置 ---
+        function selectControlScheme(scheme) {
+            gameState.controlScheme = scheme;
+            messageText.style.display = 'none';
+            document.querySelector('.button-group').style.display = 'none';
+
+            if (scheme === 'gyro') {
+                if (window.DeviceOrientationEvent && typeof DeviceOrientationEvent.requestPermission === 'function') {
+                    permissionRequest.style.display = 'block';
+                } else if (window.DeviceOrientationEvent) {
+                    window.addEventListener('deviceorientation', handleOrientation);
+                    showInstructions();
+                } else {
+                    alert('您的設備不支持陀螺儀，請刷新並選擇觸控。');
+                }
+            } else {
+                showInstructions();
+            }
+        }
+        
+        permissionBtn.addEventListener('click', () => {
+            DeviceOrientationEvent.requestPermission().then(response => {
+                if (response === 'granted') {
+                    window.addEventListener('deviceorientation', handleOrientation);
+                    permissionRequest.style.display = 'none';
+                    showInstructions();
+                } else {
+                    alert('您拒絕了權限，請刷新並選擇觸控。');
+                }
+            });
+        });
+
+        function showInstructions() {
+            if (gameState.controlScheme === 'gyro') {
+                instructionsText.innerHTML = "- 傾斜設備控制飛船移動<br>- 點擊屏幕發射子彈";
+            } else {
+                instructionsText.innerHTML = "- 按住螢幕左/右半邊移動<br>- 點擊螢幕發射子彈";
+            }
+            instructions.style.display = 'block';
+        }
+
+        function handleOrientation(event) {
+            if (event.gamma !== null) {
+                const tilt = Math.max(-45, Math.min(45, event.gamma));
+                player.x += tilt * GAME_SETTINGS.GYRO_SENSITIVITY;
+            }
+        }
+        
+        // --- 遊戲流程控制 ---
+        function startGame() {
+            gameState.started = true;
+            gameState.score = 0;
+            gameState.lives = GAME_SETTINGS.LIVES_START_COUNT;
+            gameState.currentLevel = 1;
+            
+            messageBox.style.display = 'none';
+            infoPanel.style.display = 'flex';
+            updateUI();
+            
+            startLevel(1);
+        }
+
+        function startLevel(levelNumber) {
+            if (levelNumber > LEVEL_CONFIG.length) {
+                winGame();
+                return;
+            }
+            gameState.currentLevel = levelNumber;
+            gameState.enemiesKilledThisLevel = 0;
+            gameState.isLevelTransition = false;
+            
+            bullets.length = 0; enemies.length = 0; particles.length = 0;
+            player.x = canvas.width / 2;
+            player.y = canvas.height - 100;
+
+            if (!gameState.animationId) {
+                gameLoop();
+            }
+        }
+        
+        function advanceLevel() {
+            if (gameState.isLevelTransition) return;
+            gameState.isLevelTransition = true;
+            cancelAnimationFrame(gameState.animationId);
+            gameState.animationId = null;
+
+            const nextLevel = gameState.currentLevel + 1;
+            messageTitle.textContent = `關卡 ${gameState.currentLevel} 完成!`;
+            messageText.textContent = nextLevel > LEVEL_CONFIG.length ? "準備好迎接最終勝利！" : `準備進入第 ${nextLevel} 關...`;
+            messageText.style.display = 'block';
+            instructions.style.display = 'none';
+            gameOverBox.style.display = 'none';
+            messageBox.style.display = 'block';
+
+            setTimeout(() => {
+                messageBox.style.display = 'none';
+                startLevel(nextLevel);
+            }, GAME_SETTINGS.LEVEL_TRANSITION_DELAY);
+        }
+
+        function winGame() {
+            gameState.gameOver = true;
+            messageTitle.textContent = "恭喜通關！";
+            messageText.textContent = `你以 ${gameState.score} 分的成績拯救了銀河系！`;
+            gameOverBox.style.display = 'block';
+            instructions.style.display = 'none';
+            messageBox.style.display = 'block';
+        }
+        
+        function doGameOver() {
+            gameState.gameOver = true;
+            cancelAnimationFrame(gameState.animationId);
+            gameState.animationId = null;
+
+            messageTitle.textContent = "遊戲結束";
+            messageText.textContent = `你的最終分數是: ${gameState.score}`;
+            gameOverBox.style.display = 'block';
+            instructions.style.display = 'none';
+            messageBox.style.display = 'block';
+        }
+        
+        // --- 繪圖 & 更新 ---
+        function drawPlayer() {
+            if (player.isInvincible && Math.floor(Date.now() / 100) % 2 === 0) {
+                return; // 閃爍效果
+            }
+            ctx.fillStyle = '#00BFFF'; ctx.beginPath();
+            ctx.moveTo(player.x, player.y - player.height / 3); ctx.lineTo(player.x + player.width / 2, player.y + player.height / 3); ctx.lineTo(player.x - player.width / 2, player.y + player.height / 3);
+            ctx.closePath(); ctx.fill();
+            ctx.fillStyle = '#FFF'; ctx.fillRect(player.x - 5, player.y - 5, 10, 10);
+            ctx.fillStyle = '#FFA500'; ctx.beginPath(); const flameHeight = Math.random() * 20 + 10;
+            ctx.moveTo(player.x - player.width / 4, player.y + player.height / 3); ctx.lineTo(player.x + player.width / 4, player.y + player.height / 3); ctx.lineTo(player.x, player.y + player.height / 3 + flameHeight);
+            ctx.closePath(); ctx.fill();
+        }
+        
+        function updateUI() {
+            scoreElement.textContent = `分數: ${gameState.score}`;
+            const levelConf = LEVEL_CONFIG[gameState.currentLevel - 1];
+            levelProgressElement.textContent = `關卡 ${gameState.currentLevel}: ${gameState.enemiesKilledThisLevel}/${levelConf.enemiesToClear}`;
+            livesElement.textContent = `生命: ${gameState.lives}`;
+        }
+        
+        function handlePlayerHit() {
+            if (player.isInvincible) return;
+            
+            gameState.lives--;
+            player.isInvincible = true;
+            player.invincibleTimer = GAME_SETTINGS.INVINCIBILITY_DURATION;
+            updateUI();
+            
+            if (gameState.lives <= 0) {
+                doGameOver();
+            }
+        }
+        
+        // --- 遊戲物件管理 ---
+        function shootBullet() {
+            const now = Date.now();
+            if (now - gameState.lastBulletTime < 200) return;
+            bullets.push({x: player.x, y: player.y - player.height/2, width: 6, height: 20, speed: 10});
+            gameState.lastBulletTime = now;
+        }
+
+        function spawnEnemy() {
+            const levelConf = LEVEL_CONFIG[gameState.currentLevel - 1];
+            const now = Date.now();
+            if (now - gameState.lastEnemySpawnTime < levelConf.spawnInterval) return;
+            
+            const size = Math.random() * 25 + 20;
+            const type = Math.random() < levelConf.trackerChance ? 'tracker' : 'normal';
+            
+            enemies.push({ x: Math.random() * (canvas.width - size * 2) + size, y: -size, size: size, speed: Math.random() * 2 + (levelConf.maxSpeed - 2), color: `hsl(${Math.random() * 60 + 200}, 70%, 60%)`, type: type, });
+            gameState.lastEnemySpawnTime = now;
+        }
+
+        function createParticles(x, y, color) { for (let i = 0; i < 15; i++) { particles.push({ x, y, radius: Math.random() * 4 + 1, color: color, speedX: Math.random() * 8 - 4, speedY: Math.random() * 8 - 4, life: 60 }); } }
+        function checkCollision(obj1, enemy) { const dx = obj1.x - enemy.x; const dy = obj1.y - enemy.y; return Math.sqrt(dx * dx + dy * dy) < enemy.size; }
+
+        function updateEntities() {
+            if(player.isInvincible) player.invincibleTimer--;
+            if(player.invincibleTimer <= 0) player.isInvincible = false;
+
+            for (let i = bullets.length - 1; i >= 0; i--) { bullets[i].y -= bullets[i].speed; if (bullets[i].y < 0) bullets.splice(i, 1); }
+            
+            for (let i = enemies.length - 1; i >= 0; i--) {
+                const e = enemies[i]; e.y += e.speed;
+                if (e.type === 'tracker') { const angle = Math.atan2(player.y - e.y, player.x - e.x); e.x += Math.cos(angle) * 0.5; }
+                if (checkCollision({x: player.x, y: player.y, width: player.width, height: player.height}, e)) { handlePlayerHit(); enemies.splice(i, 1); continue; }
+                
+                for (let j = bullets.length - 1; j >= 0; j--) {
+                    if (checkCollision(bullets[j], e)) {
+                        createParticles(e.x, e.y, '#FFD700');
+                        bullets.splice(j, 1);
+                        enemies.splice(i, 1);
+                        gameState.score += 10;
+                        gameState.enemiesKilledThisLevel++;
+                        updateUI();
+                        if (gameState.enemiesKilledThisLevel >= LEVEL_CONFIG[gameState.currentLevel - 1].enemiesToClear) {
+                            advanceLevel();
+                        }
+                        break;
+                    }
+                }
+                if (e.y > canvas.height + e.size) enemies.splice(i, 1);
+            }
+
+            for (let i = particles.length - 1; i >= 0; i--) { const p = particles[i]; p.x += p.speedX; p.y += p.speedY; p.life--; ctx.globalAlpha = p.life / 60; ctx.fillStyle = p.color; ctx.beginPath(); ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2); ctx.fill(); if (p.life <= 0) particles.splice(i, 1); }
+            ctx.globalAlpha = 1;
+        }
+        
+        // --- 遊戲主循環 ---
+        function gameLoop() {
+            if (gameState.gameOver || gameState.isLevelTransition) return;
+
+            // 更新玩家位置
+            if (gameState.controlScheme === 'touch') {
+                if (gameState.touchDirection === 'left') player.x -= GAME_SETTINGS.PLAYER_MAX_SPEED;
+                if (gameState.touchDirection === 'right') player.x += GAME_SETTINGS.PLAYER_MAX_SPEED;
+            }
+            player.x = Math.max(player.width / 2, Math.min(canvas.width - player.width / 2, player.x));
+            
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            drawStars();
+            drawPlayer();
+            
+            // 繪製敵人、子彈、粒子
+            for (const enemy of enemies) { ctx.fillStyle = enemy.color; ctx.beginPath(); ctx.arc(enemy.x, enemy.y, enemy.size, 0, Math.PI * 2); ctx.fill(); }
+            ctx.fillStyle = '#FFD700'; for (const bullet of bullets) { ctx.fillRect(bullet.x - bullet.width / 2, bullet.y, bullet.width, bullet.height); }
+            
+            updateEntities();
+            spawnEnemy();
+
+            gameState.animationId = requestAnimationFrame(gameLoop);
+        }
+
+        // --- 事件監聽 ---
+        gyroBtn.addEventListener('click', () => selectControlScheme('gyro'));
+        touchBtn.addEventListener('click', () => selectControlScheme('touch'));
+        startBtn.addEventListener('click', startGame);
+        restartBtn.addEventListener('click', () => window.location.reload()); // 刷新以重新選擇模式
+
+        // 觸控事件
+        let touchStartTime = 0;
+        canvas.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            if (!gameState.started || gameState.gameOver) return;
+            
+            touchStartTime = Date.now();
+            const touchX = e.touches[0].clientX;
+            gameState.touchDirection = touchX < canvas.width / 2 ? 'left' : 'right';
+            gameState.isShooting = false;
+        });
+
+        canvas.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+             if (!gameState.started || gameState.gameOver || gameState.controlScheme !== 'touch') return;
+            const touchX = e.touches[0].clientX;
+            gameState.touchDirection = touchX < canvas.width / 2 ? 'left' : 'right';
+        });
+
+        canvas.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            if (!gameState.started || gameState.gameOver) return;
+            
+            const touchDuration = Date.now() - touchStartTime;
+            if (touchDuration < 150) { // 小於150ms視為點擊
+                shootBullet();
+            }
+            gameState.touchDirection = null;
+        });
+
+        // 點擊事件 (用於陀螺儀模式或滑鼠)
+        canvas.addEventListener('click', (e) => {
+            if (gameState.started && !gameState.gameOver && gameState.controlScheme === 'gyro') {
+                shootBullet();
+            }
+        });
+
+        // --- 啟動 ---
+        resizeCanvas();
+
+    </script>
+</body>
+</html>

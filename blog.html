@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>簡單部落格系統</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        .upload-section {
+            margin-bottom: 30px;
+            padding: 20px;
+            background-color: #f9f9f9;
+            border-radius: 5px;
+            border: 1px dashed #ccc;
+        }
+        .article-list {
+            margin-top: 30px;
+        }
+        .article-item {
+            padding: 15px;
+            margin-bottom: 10px;
+            background-color: white;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .article-item:hover {
+            background-color: #f0f0f0;
+        }
+        .article-title {
+            font-weight: bold;
+            color: #333;
+            text-decoration: none;
+        }
+        .article-date {
+            color: #666;
+            font-size: 0.9em;
+        }
+        .sort-options {
+            margin-bottom: 15px;
+            text-align: right;
+        }
+        button, input[type="file"] {
+            padding: 8px 15px;
+            margin: 5px 0;
+        }
+        textarea {
+            width: 100%;
+            height: 150px;
+            margin: 10px 0;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        #articleContent {
+            white-space: pre-wrap;
+            padding: 20px;
+            background-color: white;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            margin-top: 20px;
+        }
+        .back-button {
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container" id="mainContainer">
+        <h1>簡單部落格系統</h1>
+        
+        <div class="upload-section">
+            <h2>上傳新文章</h2>
+            <input type="text" id="articleTitle" placeholder="輸入文章標題" required style="width: 100%; padding: 10px;">
+            
+            <div>
+                <h3>直接輸入內容：</h3>
+                <textarea id="articleText" placeholder="在這裡輸入文章內容..."></textarea>
+                <button id="submitText">提交文字</button>
+            </div>
+            
+            <div>
+                <h3>或上傳TXT文件：</h3>
+                <input type="file" id="fileInput" accept=".txt">
+                <button id="submitFile">提交文件</button>
+            </div>
+        </div>
+        
+        <div class="sort-options">
+            <label>排序方式：</label>
+            <select id="sortSelect">
+                <option value="dateDesc">最新上傳</option>
+                <option value="dateAsc">最早上傳</option>
+                <option value="titleAsc">標題 (A-Z)</option>
+                <option value="titleDesc">標題 (Z-A)</option>
+            </select>
+        </div>
+        
+        <div class="article-list" id="articleList">
+            <!-- 文章列表將在這裡動態生成 -->
+        </div>
+    </div>
+    
+    <div class="container" id="articleContainer" style="display: none;">
+        <button class="back-button" id="backButton">返回文章列表</button>
+        <h1 id="articleDisplayTitle"></h1>
+        <div id="articleContent"></div>
+    </div>
+
+    <script>
+        // 初始化文章數據（如果本地存儲中沒有則創建空數組）
+        let articles = JSON.parse(localStorage.getItem('articles')) || [];
+        
+        // DOM元素
+        const mainContainer = document.getElementById('mainContainer');
+        const articleContainer = document.getElementById('articleContainer');
+        const articleList = document.getElementById('articleList');
+        const articleTitleInput = document.getElementById('articleTitle');
+        const articleTextInput = document.getElementById('articleText');
+        const fileInput = document.getElementById('fileInput');
+        const submitTextBtn = document.getElementById('submitText');
+        const submitFileBtn = document.getElementById('submitFile');
+        const sortSelect = document.getElementById('sortSelect');
+        const backButton = document.getElementById('backButton');
+        const articleDisplayTitle = document.getElementById('articleDisplayTitle');
+        const articleContent = document.getElementById('articleContent');
+        
+        // 渲染文章列表
+        function renderArticleList() {
+            // 根據選擇的排序方式排序文章
+            const sortValue = sortSelect.value;
+            let sortedArticles = [...articles];
+            
+            if (sortValue === 'dateDesc') {
+                sortedArticles.sort((a, b) => new Date(b.date) - new Date(a.date));
+            } else if (sortValue === 'dateAsc') {
+                sortedArticles.sort((a, b) => new Date(a.date) - new Date(b.date));
+            } else if (sortValue === 'titleAsc') {
+                sortedArticles.sort((a, b) => a.title.localeCompare(b.title));
+            } else if (sortValue === 'titleDesc') {
+                sortedArticles.sort((a, b) => b.title.localeCompare(a.title));
+            }
+            
+            // 清空當前列表
+            articleList.innerHTML = '';
+            
+            // 如果沒有文章，顯示提示
+            if (sortedArticles.length === 0) {
+                articleList.innerHTML = '<p>尚未有任何文章，請上傳第一篇文章！</p>';
+                return;
+            }
+            
+            // 添加每篇文章到列表
+            sortedArticles.forEach(article => {
+                const articleElement = document.createElement('div');
+                articleElement.className = 'article-item';
+                
+                const date = new Date(article.date);
+                const formattedDate = `${date.getFullYear()}-${(date.getMonth()+1).toString().padStart(2, '0')}-${date.getDate().toString().padStart(2, '0')} ${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
+                
+                articleElement.innerHTML = `
+                    <a href="#" class="article-title" data-id="${article.id}">${article.title}</a>
+                    <span class="article-date">${formattedDate}</span>
+                `;
+                
+                articleList.appendChild(articleElement);
+            });
+            
+            // 為所有文章標題添加點擊事件
+            document.querySelectorAll('.article-title').forEach(title => {
+                title.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    const articleId = this.getAttribute('data-id');
+                    showArticle(articleId);
+                });
+            });
+        }
+        
+        // 顯示單篇文章
+        function showArticle(articleId) {
+            const article = articles.find(a => a.id === articleId);
+            if (!article) return;
+            
+            mainContainer.style.display = 'none';
+            articleContainer.style.display = 'block';
+            
+            articleDisplayTitle.textContent = article.title;
+            articleContent.textContent = article.content;
+        }
+        
+        // 返回文章列表
+        backButton.addEventListener('click', function() {
+            mainContainer.style.display = 'block';
+            articleContainer.style.display = 'none';
+        });
+        
+        // 提交文字內容
+        submitTextBtn.addEventListener('click', function() {
+            const title = articleTitleInput.value.trim();
+            const content = articleTextInput.value.trim();
+            
+            if (!title) {
+                alert('請輸入文章標題');
+                return;
+            }
+            
+            if (!content) {
+                alert('請輸入文章內容');
+                return;
+            }
+            
+            addArticle(title, content);
+            
+            // 清空輸入框
+            articleTitleInput.value = '';
+            articleTextInput.value = '';
+        });
+        
+        // 提交文件內容
+        submitFileBtn.addEventListener('click', function() {
+            const title = articleTitleInput.value.trim();
+            const file = fileInput.files[0];
+            
+            if (!title) {
+                alert('請輸入文章標題');
+                return;
+            }
+            
+            if (!file) {
+                alert('請選擇要上傳的文件');
+                return;
+            }
+            
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const content = e.target.result;
+                addArticle(title, content);
+                
+                // 清空輸入框和文件選擇
+                articleTitleInput.value = '';
+                fileInput.value = '';
+            };
+            reader.readAsText(file);
+        });
+        
+        // 添加新文章
+        function addArticle(title, content) {
+            const newArticle = {
+                id: generateId(),
+                title: title,
+                content: content,
+                date: new Date().toISOString()
+            };
+            
+            articles.unshift(newArticle);
+            localStorage.setItem('articles', JSON.stringify(articles));
+            renderArticleList();
+            
+            alert('文章已成功上傳！');
+        }
+        
+        // 生成唯一ID
+        function generateId() {
+            return Date.now().toString(36) + Math.random().toString(36).substr(2);
+        }
+        
+        // 排序選項改變時重新渲染列表
+        sortSelect.addEventListener('change', renderArticleList);
+        
+        // 初始渲染
+        renderArticleList();
+    </script>
+</body>
+</html>

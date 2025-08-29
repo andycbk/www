@@ -1,0 +1,600 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>英單落雨｜Word Rain</title>
+<style>
+  :root{
+    --bg:#0b1020; --panel:#0f172a; --text:#e5e7eb; --muted:#94a3b8;
+    --accent:#60a5fa; --good:#34d399; --bad:#f87171; --warn:#fbbf24;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0; font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans TC","PingFang TC","Microsoft JhengHei",Arial,sans-serif;
+    color:var(--text); background:
+      radial-gradient(1400px 900px at 80% -10%, #1b2340 0%, #0c1328 40%, var(--bg) 100%);
+    display:flex; flex-direction:column; align-items:center; gap:12px; padding:14px;
+  }
+  header,footer{width:min(100%,1100px)}
+  header{display:flex; gap:10px; align-items:center; justify-content:space-between; flex-wrap:wrap}
+  h1{font-size:clamp(20px,2.6vw,28px); margin:6px 0}
+  .pill{font-size:12px; padding:4px 10px; border-radius:999px; background:#0b1220; border:1px solid rgba(255,255,255,.08); color:var(--muted)}
+  .panel{
+    width:min(100%,1100px); border:1px solid rgba(255,255,255,.12); border-radius:16px; overflow:hidden;
+    background:linear-gradient(180deg, #0e162e 0%, #0b1224 100%);
+  }
+  .hud{
+    display:flex; gap:10px; flex-wrap:wrap; align-items:center; padding:10px; background:rgba(255,255,255,.03);
+    border-bottom:1px solid rgba(255,255,255,.08);
+  }
+  .hud .item{
+    padding:8px 10px; border-radius:10px; border:1px solid rgba(255,255,255,.10); font-size:14px; background:#0b1220
+  }
+  .controls{margin-left:auto; display:flex; gap:8px; flex-wrap:wrap}
+  select,button,input[type="checkbox"]{
+    background:#0b1220; color:var(--text); border:1px solid rgba(255,255,255,.14); border-radius:10px; padding:8px 10px; font-size:14px
+  }
+  button{cursor:pointer; transition:transform .05s ease} button:active{transform:scale(.98)}
+  .gameWrap{display:grid; grid-template-rows:auto auto; gap:10px; padding:10px}
+  canvas{width:100%; height:520px; background:linear-gradient(180deg,#0b1220,#0b1228); border:1px solid rgba(255,255,255,.08); border-radius:14px}
+  @media (max-width:760px){ canvas{ height:60vh } }
+  .inputRow{display:flex; gap:10px; flex-wrap:wrap; align-items:center}
+  .typeBox{
+    flex:1; display:flex; align-items:center; gap:8px; background:#0b1220; border:1px solid rgba(255,255,255,.14);
+    border-radius:12px; padding:10px 12px
+  }
+  .typeBox input{
+    flex:1; background:transparent; color:var(--text); border:none; outline:none; font-size:16px
+  }
+  .hint{font-size:12px; color:var(--muted)}
+  .kbd{font-family:ui-monospace,SFMono-Regular,Menlo,monospace; border:1px solid rgba(255,255,255,.2); padding:2px 6px; border-radius:6px; font-size:12px; background:rgba(255,255,255,.05)}
+  dialog{border:none; padding:0; background:transparent}
+  .modal{
+    background:linear-gradient(180deg,#0c1220,#0b1020); border:1px solid rgba(255,255,255,.14); color:var(--text);
+    border-radius:16px; padding:18px; width:min(94vw,460px)
+  }
+  textarea{
+    width:100%; min-height:140px; background:#0b1220; color:var(--text); border:1px solid rgba(255,255,255,.14);
+    border-radius:12px; padding:10px; font-size:13px; resize:vertical
+  }
+  a{color:var(--accent); text-decoration:none}
+  footer{display:flex; justify-content:space-between; align-items:center; color:var(--muted); font-size:12px; padding:0 4px}
+</style>
+</head>
+<body>
+  <header>
+    <h1>英單落雨 <span class="pill">Word Rain</span></h1>
+    <div class="controls">
+      <label>難度：
+        <select id="difficulty">
+          <option value="easy">簡單</option>
+          <option value="normal" selected>普通</option>
+          <option value="hard">困難</option>
+          <option value="insane">地獄</option>
+        </select>
+      </label>
+      <button id="startBtn">開始</button>
+      <button id="pauseBtn" disabled>暫停</button>
+      <button id="packBtn">自訂單字</button>
+      <label style="display:flex; align-items:center; gap:6px">
+        <input type="checkbox" id="soundToggle" checked /> 音效
+      </label>
+    </div>
+  </header>
+
+  <div class="panel">
+    <div class="hud">
+      <div class="item">分數：<b id="score">0</b></div>
+      <div class="item">連擊：<b id="combo">0</b></div>
+      <div class="item">漏掉：<b id="miss">0</b> / <b id="lives">5</b></div>
+      <div class="item">速度：<b id="spd">1.0x</b></div>
+      <div class="item">最佳分數：<b id="best">—</b></div>
+    </div>
+    <div class="gameWrap">
+      <canvas id="cv" width="1100" height="520" aria-label="遊戲畫布：有中文提示的落下單字"></canvas>
+      <div class="inputRow">
+        <div class="typeBox" role="group" aria-label="輸入答案">
+          <span>輸入英文：</span>
+          <input id="answer" type="text" autocomplete="off" placeholder="例如：apple" />
+          <button id="submitBtn">送出</button>
+        </div>
+        <div class="hint">提示：<span class="kbd">Enter</span> 送出、<span class="kbd">Esc</span> 清空；打對可消除畫面上所有相同的單字。</div>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    <div>© 2025 Word Rain · 專注核心</div>
+  </footer>
+
+  <script>
+    // 預設單字庫
+    const defaultWords = [
+      {en: 'apple', zh: '蘋果'},
+      {en: 'book', zh: '書本'},
+      {en: 'cat', zh: '貓'},
+      {en: 'dog', zh: '狗'},
+      {en: 'elephant', zh: '大象'},
+      {en: 'fish', zh: '魚'},
+      {en: 'green', zh: '綠色'},
+      {en: 'house', zh: '房子'},
+      {en: 'ice', zh: '冰'},
+      {en: 'jump', zh: '跳躍'},
+      {en: 'key', zh: '鑰匙'},
+      {en: 'love', zh: '愛'},
+      {en: 'moon', zh: '月亮'},
+      {en: 'nice', zh: '好的'},
+      {en: 'orange', zh: '橘子'},
+      {en: 'pen', zh: '筆'},
+      {en: 'queen', zh: '女王'},
+      {en: 'red', zh: '紅色'},
+      {en: 'sun', zh: '太陽'},
+      {en: 'tree', zh: '樹'},
+      {en: 'umbrella', zh: '雨傘'},
+      {en: 'voice', zh: '聲音'},
+      {en: 'water', zh: '水'},
+      {en: 'yellow', zh: '黃色'},
+      {en: 'zoo', zh: '動物園'},
+      {en: 'computer', zh: '電腦'},
+      {en: 'school', zh: '學校'},
+      {en: 'friend', zh: '朋友'},
+      {en: 'family', zh: '家庭'},
+      {en: 'happy', zh: '快樂'},
+      {en: 'music', zh: '音樂'},
+      {en: 'world', zh: '世界'}
+    ];
+
+    // 遊戲狀態
+    let gameState = {
+      isRunning: false,
+      isPaused: false,
+      score: 0,
+      combo: 0,
+      miss: 0,
+      lives: 5,
+      speed: 1.0,
+      words: [],
+      currentDifficulty: 'normal',
+      customWords: null,
+      bestScore: localStorage.getItem('wordRainBest') || null
+    };
+
+    // 難度設定
+    const difficultySettings = {
+      easy: { spawnRate: 0.015, fallSpeed: 1, points: 10 },
+      normal: { spawnRate: 0.02, fallSpeed: 1.5, points: 15 },
+      hard: { spawnRate: 0.025, fallSpeed: 2, points: 20 },
+      insane: { spawnRate: 0.03, fallSpeed: 3, points: 30 }
+    };
+
+    // 畫布和上下文
+    const canvas = document.getElementById('cv');
+    const ctx = canvas.getContext('2d');
+
+    // DOM 元素
+    const elements = {
+      startBtn: document.getElementById('startBtn'),
+      pauseBtn: document.getElementById('pauseBtn'),
+      packBtn: document.getElementById('packBtn'),
+      soundToggle: document.getElementById('soundToggle'),
+      difficulty: document.getElementById('difficulty'),
+      answer: document.getElementById('answer'),
+      submitBtn: document.getElementById('submitBtn'),
+      score: document.getElementById('score'),
+      combo: document.getElementById('combo'),
+      miss: document.getElementById('miss'),
+      lives: document.getElementById('lives'),
+      spd: document.getElementById('spd'),
+      best: document.getElementById('best')
+    };
+
+    // 單字類別
+    class Word {
+      constructor(text, translation) {
+        this.text = text;
+        this.translation = translation;
+        this.x = Math.random() * (canvas.width - 150);
+        this.y = -30;
+        this.speed = difficultySettings[gameState.currentDifficulty].fallSpeed * gameState.speed;
+        this.selected = false;
+        this.size = Math.max(16, Math.min(24, text.length * 2 + 12));
+      }
+
+      update() {
+        this.y += this.speed;
+      }
+
+      draw() {
+        ctx.font = `${this.size}px system-ui, sans-serif`;
+        ctx.textAlign = 'left';
+        
+        // 背景
+        if (this.selected) {
+          ctx.fillStyle = 'rgba(96, 165, 250, 0.3)';
+          ctx.fillRect(this.x - 5, this.y - this.size/2 - 5, ctx.measureText(this.text).width + 10, this.size + 10);
+          ctx.strokeStyle = '#60a5fa';
+          ctx.lineWidth = 2;
+          ctx.strokeRect(this.x - 5, this.y - this.size/2 - 5, ctx.measureText(this.text).width + 10, this.size + 10);
+        }
+
+        // 英文字
+        ctx.fillStyle = this.selected ? '#ffffff' : '#e5e7eb';
+        ctx.fillText(this.text, this.x, this.y);
+
+        // 中文字（小一點，在下方）
+        ctx.font = `${Math.max(12, this.size - 6)}px system-ui, sans-serif`;
+        ctx.fillStyle = this.selected ? '#f0f9ff' : '#94a3b8';
+        const zhWidth = ctx.measureText(this.translation).width;
+        ctx.fillText(this.translation, this.x, this.y + this.size/2 + 15);
+      }
+
+      isOffScreen() {
+        return this.y > canvas.height + 50;
+      }
+
+      contains(x, y) {
+        const textWidth = ctx.measureText(this.text).width;
+        return x >= this.x && x <= this.x + textWidth && 
+               y >= this.y - this.size/2 && y <= this.y + this.size/2;
+      }
+    }
+
+    // 初始化
+    function init() {
+      elements.best.textContent = gameState.bestScore || '—';
+      setupEventListeners();
+      gameLoop();
+    }
+
+    // 設置事件監聽器
+    function setupEventListeners() {
+      elements.startBtn.addEventListener('click', startGame);
+      elements.pauseBtn.addEventListener('click', togglePause);
+      elements.packBtn.addEventListener('click', openWordPackModal);
+      elements.soundToggle.addEventListener('change', (e) => {
+        gameState.soundEnabled = e.target.checked;
+      });
+      elements.difficulty.addEventListener('change', (e) => {
+        gameState.currentDifficulty = e.target.value;
+      });
+      elements.submitBtn.addEventListener('click', submitAnswer);
+      
+      elements.answer.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+          submitAnswer();
+        } else if (e.key === 'Escape') {
+          elements.answer.value = '';
+        }
+      });
+
+      // 畫布點擊事件
+      canvas.addEventListener('click', (e) => {
+        if (!gameState.isRunning || gameState.isPaused) return;
+        
+        const rect = canvas.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        
+        // 檢查是否點擊到單字
+        for (let word of gameState.words) {
+          if (word.contains(x, y)) {
+            selectWord(word);
+            break;
+          }
+        }
+      });
+    }
+
+    // 開始遊戲
+    function startGame() {
+      gameState.isRunning = true;
+      gameState.isPaused = false;
+      gameState.score = 0;
+      gameState.combo = 0;
+      gameState.miss = 0;
+      gameState.lives = 5;
+      gameState.speed = 1.0;
+      gameState.words = [];
+      
+      elements.answer.value = '';
+      elements.answer.focus();
+      
+      elements.startBtn.disabled = true;
+      elements.pauseBtn.disabled = false;
+      elements.difficulty.disabled = true;
+      
+      updateHUD();
+    }
+
+    // 暫停/繼續遊戲
+    function togglePause() {
+      gameState.isPaused = !gameState.isPaused;
+      elements.pauseBtn.textContent = gameState.isPaused ? '繼續' : '暫停';
+    }
+
+    // 選擇單字
+    function selectWord(word) {
+      word.selected = !word.selected;
+      
+      if (word.selected) {
+        // 高亮所有相同的單字
+        for (let w of gameState.words) {
+          if (w.text === word.text) {
+            w.selected = true;
+          }
+        }
+      }
+    }
+
+    // 提交答案
+    function submitAnswer() {
+      if (!gameState.isRunning || gameState.isPaused) return;
+      
+      const answer = elements.answer.value.trim().toLowerCase();
+      if (!answer) return;
+
+      let found = false;
+      let selectedWords = [];
+
+      // 找到匹配的單字
+      for (let word of gameState.words) {
+        if (word.text.toLowerCase() === answer) {
+          found = true;
+          selectedWords.push(word);
+        }
+      }
+
+      if (found) {
+        // 消除所有匹配的單字
+        for (let word of selectedWords) {
+          const index = gameState.words.indexOf(word);
+          if (index > -1) {
+            gameState.words.splice(index, 1);
+            gameState.score += difficultySettings[gameState.currentDifficulty].points * (1 + gameState.combo * 0.1);
+            gameState.combo++;
+          }
+        }
+        
+        elements.answer.value = '';
+        playSound('correct');
+      } else {
+        // 檢查是否有單字被選中但答案錯誤
+        let hasSelected = false;
+        for (let word of gameState.words) {
+          if (word.selected) {
+            hasSelected = true;
+            break;
+          }
+        }
+        
+        if (hasSelected) {
+          // 如果選中了單字但答案錯誤，增加miss
+          gameState.miss++;
+          gameState.combo = 0;
+          playSound('wrong');
+          
+          // 移除所有選中的單字
+          gameState.words = gameState.words.filter(word => !word.selected);
+        } else {
+          // 普通錯誤，只是增加miss
+          gameState.miss++;
+          gameState.combo = 0;
+          playSound('wrong');
+        }
+      }
+
+      // 檢查是否失去生命
+      if (gameState.miss >= gameState.lives) {
+        endGame();
+      }
+
+      updateHUD();
+    }
+
+    // 更新 HUD
+    function updateHUD() {
+      elements.score.textContent = Math.floor(gameState.score);
+      elements.combo.textContent = gameState.combo;
+      elements.miss.textContent = gameState.miss;
+      elements.lives.textContent = gameState.lives;
+      elements.spd.textContent = gameState.speed.toFixed(1) + 'x';
+      elements.best.textContent = gameState.bestScore || '—';
+    }
+
+    // 遊戲主循環
+    function gameLoop() {
+      if (gameState.isRunning && !gameState.isPaused) {
+        update();
+        draw();
+      } else {
+        draw(); // 即使遊戲未運行也繪製（顯示暫停或開始畫面）
+      }
+      
+      requestAnimationFrame(gameLoop);
+    }
+
+    // 更新遊戲邏輯
+    function update() {
+      const settings = difficultySettings[gameState.currentDifficulty];
+      
+      // 生成新單字
+      if (Math.random() < settings.spawnRate) {
+        const allWords = gameState.customWords || defaultWords;
+        const randomWord = allWords[Math.floor(Math.random() * allWords.length)];
+        gameState.words.push(new Word(randomWord.en, randomWord.zh));
+      }
+
+      // 更新單字位置
+      for (let i = gameState.words.length - 1; i >= 0; i--) {
+        const word = gameState.words[i];
+        word.speed = settings.fallSpeed * gameState.speed;
+        word.update();
+
+        // 檢查單字是否掉落
+        if (word.isOffScreen()) {
+          gameState.words.splice(i, 1);
+          gameState.miss++;
+          gameState.combo = 0;
+          
+          if (gameState.miss >= gameState.lives) {
+            endGame();
+          }
+        }
+      }
+
+      updateHUD();
+    }
+
+    // 繪製遊戲
+    function draw() {
+      // 清空畫布
+      ctx.fillStyle = 'rgba(11, 18, 32, 0.1)';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // 繪製單字
+      for (let word of gameState.words) {
+        word.draw();
+      }
+
+      // 繪製暫停或開始提示
+      if (!gameState.isRunning) {
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+        ctx.font = '32px system-ui, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('英單落雨', canvas.width / 2, canvas.height / 2 - 20);
+        ctx.font = '18px system-ui, sans-serif';
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+        ctx.fillText('點擊「開始」按鈕開始遊戲', canvas.width / 2, canvas.height / 2 + 20);
+      } else if (gameState.isPaused) {
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+        ctx.font = '32px system-ui, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('遊戲暫停', canvas.width / 2, canvas.height / 2);
+      }
+    }
+
+    // 結束遊戲
+    function endGame() {
+      gameState.isRunning = false;
+      gameState.isPaused = false;
+      
+      elements.startBtn.disabled = false;
+      elements.pauseBtn.disabled = true;
+      elements.difficulty.disabled = false;
+      elements.pauseBtn.textContent = '暫停';
+      
+      // 檢查最佳分數
+      if (!gameState.bestScore || gameState.score > gameState.bestScore) {
+        gameState.bestScore = gameState.score;
+        localStorage.setItem('wordRainBest', gameState.bestScore);
+        elements.best.textContent = Math.floor(gameState.bestScore);
+      }
+      
+      playSound('gameOver');
+    }
+
+    // 音效（模擬）
+    function playSound(type) {
+      if (!gameState.soundEnabled) return;
+      
+      // 這裡可以添加實際的音效播放代碼
+      // 目前只是模擬
+      try {
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        const oscillator = audioContext.createOscillator();
+        const gainNode = audioContext.createGain();
+        
+        oscillator.connect(gainNode);
+        gainNode.connect(audioContext.destination);
+        
+        let frequency = 440;
+        let duration = 0.1;
+        
+        switch(type) {
+          case 'correct':
+            frequency = 800;
+            duration = 0.2;
+            break;
+          case 'wrong':
+            frequency = 200;
+            duration = 0.3;
+            break;
+          case 'gameOver':
+            frequency = 150;
+            duration = 0.5;
+            break;
+        }
+        
+        oscillator.frequency.setValueAtTime(frequency, audioContext.currentTime);
+        gainNode.gain.setValueAtTime(0.1, audioContext.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + duration);
+        
+        oscillator.start(audioContext.currentTime);
+        oscillator.stop(audioContext.currentTime + duration);
+      } catch (e) {
+        // 如果音效播放失敗，靜默處理
+      }
+    }
+
+    // 自訂單字包對話框
+    function openWordPackModal() {
+      const modal = document.createElement('dialog');
+      modal.className = 'modal';
+      modal.innerHTML = `
+        <h3 style="margin-top:0;color:var(--text)">自訂單字包</h3>
+        <p style="margin:10px 0;color:var(--muted);font-size:14px">每行格式：英文,中文（例如：hello,你好）</p>
+        <textarea id="customWordsText" placeholder="apple,蘋果&#10;book,書本&#10;cat,貓&#10;..."></textarea>
+        <div style="display:flex;gap:10px;margin-top:16px">
+          <button id="saveWordPack" style="flex:1">儲存</button>
+          <button id="cancelWordPack" style="flex:1">取消</button>
+        </div>
+      `;
+      
+      document.body.appendChild(modal);
+      modal.showModal();
+      
+      document.getElementById('saveWordPack').addEventListener('click', () => {
+        const text = document.getElementById('customWordsText').value;
+        const lines = text.split('\n').filter(line => line.trim());
+        const customWords = [];
+        
+        for (let line of lines) {
+          const parts = line.split(',').map(part => part.trim());
+          if (parts.length >= 2) {
+            customWords.push({ en: parts[0], zh: parts[1] });
+          }
+        }
+        
+        if (customWords.length > 0) {
+          gameState.customWords = customWords;
+          modal.close();
+          document.body.removeChild(modal);
+          alert('單字包已儲存！');
+        } else {
+          alert('請輸入有效的單字格式！');
+        }
+      });
+      
+      document.getElementById('cancelWordPack').addEventListener('click', () => {
+        modal.close();
+        document.body.removeChild(modal);
+      });
+      
+      // 點擊背景關閉
+      modal.addEventListener('click', (e) => {
+        if (e.target === modal) {
+          modal.close();
+          document.body.removeChild(modal);
+        }
+      });
+    }
+
+    // 啟動遊戲
+    init();
+  </script>
+</body>
+</html>

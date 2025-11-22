@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>黑白點陣圖工具 (雙欄精簡版)</title>
+    <title>黑白點陣圖工具 (進階版)</title>
     <style>
         body {
             font-family: "Microsoft JhengHei", sans-serif;
@@ -129,6 +129,19 @@
             border: 1px solid #cce5ff;
         }
 
+        /* 新增樣式：區分調色區域 */
+        .tone-section {
+            grid-column: 1 / -1;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            background-color: #fff8f0;
+            padding: 8px;
+            border-radius: 5px;
+            border: 1px solid #ffeeba;
+            margin-bottom: 5px;
+        }
+
         @media (max-width: 600px) {
             .controls {
                 grid-template-columns: 1fr;
@@ -139,19 +152,31 @@
                 padding-bottom: 20px;
                 margin-bottom: 20px;
             }
-            .file-input-wrapper, hr { grid-column: span 1; }
+            .file-input-wrapper, hr, .tone-section { grid-column: span 1; }
+            .tone-section { grid-template-columns: 1fr; }
         }
     </style>
 </head>
 <body>
-    <h1>黑白點陣圖工具</h1>
-    <p class="subtitle">5cm (492px) @ 250dpi | 亮角 & 抖動模式</p>
+    <h1>黑白點陣圖工具 v2.0</h1>
+    <p class="subtitle">5cm (492px) @ 250dpi | 亮/暗部 & 抖動調整</p>
 
     <div class="container">
         <div class="controls">
             <div class="file-input-wrapper" onclick="document.getElementById('upload').click()">
                 <span>📂 上傳圖片</span>
                 <input type="file" id="upload" accept="image/*" style="display: none;">
+            </div>
+
+            <div class="tone-section">
+                <div class="control-group">
+                    <label style="color:#d35400;">亮部調整 <span id="val-highlights">0</span></label>
+                    <input type="range" id="highlights" min="-100" max="100" value="0">
+                </div>
+                <div class="control-group">
+                    <label style="color:#2e4053;">暗部調整 <span id="val-shadows">0</span></label>
+                    <input type="range" id="shadows" min="-100" max="100" value="0">
+                </div>
             </div>
 
             <div class="control-group">
@@ -209,6 +234,8 @@
         const canvasInfo = document.getElementById('canvasInfo');
 
         const sliders = {
+            highlights: document.getElementById('highlights'), // 新增
+            shadows: document.getElementById('shadows'),       // 新增
             brightness: document.getElementById('brightness'),
             contrast: document.getElementById('contrast'),
             sharpness: document.getElementById('sharpness'),
@@ -267,6 +294,9 @@
             let imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
             let data = imageData.data;
 
+            // 獲取滑桿數值
+            const highlightVal = parseInt(sliders.highlights.value);
+            const shadowVal = parseInt(sliders.shadows.value);
             const brightness = parseInt(sliders.brightness.value);
             const contrast = parseInt(sliders.contrast.value);
             const contrastFactor = (259 * (contrast + 255)) / (255 * (259 - contrast));
@@ -278,6 +308,7 @@
             const w = canvas.width;
             const h = canvas.height;
 
+            // 1. 先應用銳利化
             if (sharpness > 0) {
                 imageData = applySharpness(imageData, w, h, sharpness / 100);
                 data = imageData.data;
@@ -293,11 +324,45 @@
                 let g = data[i+1];
                 let b = data[i+2];
 
+                // --- 新增：亮部/暗部調整 (Tone Curve Adjustment) ---
+                // 將 RGB 歸一化到 0-1 以便計算
+                if (highlightVal !== 0 || shadowVal !== 0) {
+                    let nr = r / 255;
+                    let ng = g / 255;
+                    let nb = b / 255;
+
+                    // 暗部調整: 針對暗像素 (1-nr) 較大的部分進行加強
+                    // shadowVal > 0 提亮暗部, shadowVal < 0 壓暗暗部
+                    if (shadowVal !== 0) {
+                        const sStrength = shadowVal * 1.5; // 係數微調增加手感
+                        r += sStrength * (1 - nr) * (1 - nr); 
+                        g += sStrength * (1 - ng) * (1 - ng);
+                        b += sStrength * (1 - nb) * (1 - nb);
+                    }
+
+                    // 亮部調整: 針對亮像素 (nr) 較大的部分進行加強
+                    // highlightVal > 0 提亮亮部, highlightVal < 0 壓暗亮部(找回細節)
+                    if (highlightVal !== 0) {
+                        const hStrength = highlightVal * 1.5;
+                        r += hStrength * nr * nr;
+                        g += hStrength * ng * ng;
+                        b += hStrength * nb * nb;
+                    }
+                    
+                    // 鉗制回 0-255 範圍
+                    r = Math.max(0, Math.min(255, r));
+                    g = Math.max(0, Math.min(255, g));
+                    b = Math.max(0, Math.min(255, b));
+                }
+                // ----------------------------------------------
+
+                // 2. 亮度與對比度
                 r += brightness; g += brightness; b += brightness;
                 r = contrastFactor * (r - 128) + 128;
                 g = contrastFactor * (g - 128) + 128;
                 b = contrastFactor * (b - 128) + 128;
 
+                // 3. 亮角 (Vignette)
                 if (vignetteStr > 0) {
                     const px = (i / 4) % w;
                     const py = Math.floor((i / 4) / w);
@@ -310,9 +375,11 @@
                 g = Math.max(0, Math.min(255, g));
                 b = Math.max(0, Math.min(255, b));
 
+                // 4. 轉灰階
                 grayPixels[i / 4] = 0.299 * r + 0.587 * g + 0.114 * b;
             }
 
+            // 5. 抖動與二值化 (Floyd-Steinberg)
             for (let y = 0; y < h; y++) {
                 for (let x = 0; x < w; x++) {
                     const idx = y * w + x;
@@ -330,6 +397,7 @@
                 }
             }
 
+            // 6. 寫回 Canvas
             for (let i = 0; i < grayPixels.length; i++) {
                 const val = grayPixels[i] > 128 ? 255 : 0;
                 const idx = i * 4;

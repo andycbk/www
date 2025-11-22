@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>黑白點陣圖工具 (進階版)</title>
+    <title>黑白點陣圖工具 (邊緣亮角版)</title>
     <style>
         body {
             font-family: "Microsoft JhengHei", sans-serif;
@@ -129,7 +129,6 @@
             border: 1px solid #cce5ff;
         }
 
-        /* 新增樣式：區分調色區域 */
         .tone-section {
             grid-column: 1 / -1;
             display: grid;
@@ -158,8 +157,8 @@
     </style>
 </head>
 <body>
-    <h1>黑白點陣圖工具 v2.0</h1>
-    <p class="subtitle">5cm (492px) @ 250dpi | 亮/暗部 & 抖動調整</p>
+    <h1>黑白點陣圖工具 v2.1</h1>
+    <p class="subtitle">5cm (492px) @ 250dpi | 四周亮角 25px 限定版</p>
 
     <div class="container">
         <div class="controls">
@@ -195,7 +194,7 @@
             </div>
 
             <div class="control-group">
-                <label>亮角強度 <span id="val-vignette">0</span></label>
+                <label>四周亮角 (25px) <span id="val-vignette">0</span></label>
                 <input type="range" id="vignette" min="0" max="100" value="0">
             </div>
 
@@ -226,6 +225,7 @@
         const TARGET_WIDTH_CM = 5;
         const TARGET_DPI = 250;
         const TARGET_WIDTH_PX = Math.round((TARGET_WIDTH_CM / 2.54) * TARGET_DPI);
+        const VIGNETTE_RANGE_PX = 25; // 設定亮角範圍為 25px
 
         const uploadInput = document.getElementById('upload');
         const canvas = document.getElementById('canvas');
@@ -234,8 +234,8 @@
         const canvasInfo = document.getElementById('canvasInfo');
 
         const sliders = {
-            highlights: document.getElementById('highlights'), // 新增
-            shadows: document.getElementById('shadows'),       // 新增
+            highlights: document.getElementById('highlights'),
+            shadows: document.getElementById('shadows'),
             brightness: document.getElementById('brightness'),
             contrast: document.getElementById('contrast'),
             sharpness: document.getElementById('sharpness'),
@@ -294,7 +294,6 @@
             let imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
             let data = imageData.data;
 
-            // 獲取滑桿數值
             const highlightVal = parseInt(sliders.highlights.value);
             const shadowVal = parseInt(sliders.shadows.value);
             const brightness = parseInt(sliders.brightness.value);
@@ -308,40 +307,31 @@
             const w = canvas.width;
             const h = canvas.height;
 
-            // 1. 先應用銳利化
             if (sharpness > 0) {
                 imageData = applySharpness(imageData, w, h, sharpness / 100);
                 data = imageData.data;
             }
 
             let grayPixels = new Float32Array(w * h);
-            const cx = w / 2;
-            const cy = h / 2;
-            const maxDist = Math.sqrt(cx * cx + cy * cy);
 
             for (let i = 0; i < data.length; i += 4) {
                 let r = data[i];
                 let g = data[i+1];
                 let b = data[i+2];
 
-                // --- 新增：亮部/暗部調整 (Tone Curve Adjustment) ---
-                // 將 RGB 歸一化到 0-1 以便計算
+                // 1. 亮暗部調整
                 if (highlightVal !== 0 || shadowVal !== 0) {
                     let nr = r / 255;
                     let ng = g / 255;
                     let nb = b / 255;
 
-                    // 暗部調整: 針對暗像素 (1-nr) 較大的部分進行加強
-                    // shadowVal > 0 提亮暗部, shadowVal < 0 壓暗暗部
                     if (shadowVal !== 0) {
-                        const sStrength = shadowVal * 1.5; // 係數微調增加手感
+                        const sStrength = shadowVal * 1.5;
                         r += sStrength * (1 - nr) * (1 - nr); 
                         g += sStrength * (1 - ng) * (1 - ng);
                         b += sStrength * (1 - nb) * (1 - nb);
                     }
 
-                    // 亮部調整: 針對亮像素 (nr) 較大的部分進行加強
-                    // highlightVal > 0 提亮亮部, highlightVal < 0 壓暗亮部(找回細節)
                     if (highlightVal !== 0) {
                         const hStrength = highlightVal * 1.5;
                         r += hStrength * nr * nr;
@@ -349,12 +339,10 @@
                         b += hStrength * nb * nb;
                     }
                     
-                    // 鉗制回 0-255 範圍
                     r = Math.max(0, Math.min(255, r));
                     g = Math.max(0, Math.min(255, g));
                     b = Math.max(0, Math.min(255, b));
                 }
-                // ----------------------------------------------
 
                 // 2. 亮度與對比度
                 r += brightness; g += brightness; b += brightness;
@@ -362,24 +350,40 @@
                 g = contrastFactor * (g - 128) + 128;
                 b = contrastFactor * (b - 128) + 128;
 
-                // 3. 亮角 (Vignette)
+                // 3. 亮角 (Vignette) - 25px 邊緣限定邏輯
                 if (vignetteStr > 0) {
                     const px = (i / 4) % w;
                     const py = Math.floor((i / 4) / w);
-                    const dist = Math.sqrt((px - cx) ** 2 + (py - cy) ** 2);
-                    const brightenAmount = (dist / maxDist) * vignetteStr; 
-                    r += brightenAmount; g += brightenAmount; b += brightenAmount;
+
+                    // 計算離四個邊緣最近的距離
+                    const distLeft = px;
+                    const distRight = w - 1 - px;
+                    const distTop = py;
+                    const distBottom = h - 1 - py;
+                    
+                    const minDist = Math.min(distLeft, distRight, distTop, distBottom);
+
+                    // 只有當距離小於指定範圍 (25px) 時才作用
+                    if (minDist < VIGNETTE_RANGE_PX) {
+                        // 計算漸層強度：0 (最邊緣) -> 強度最大, 25 (內部) -> 強度為0
+                        const edgeFactor = (VIGNETTE_RANGE_PX - minDist) / VIGNETTE_RANGE_PX;
+                        
+                        // 套用亮度增加 (根據滑桿強度 * 距離係數)
+                        const brightenAmount = edgeFactor * vignetteStr * 2.5; // *2.5 加強效果讓邊緣更明顯
+                        
+                        r += brightenAmount;
+                        g += brightenAmount;
+                        b += brightenAmount;
+                    }
                 }
 
                 r = Math.max(0, Math.min(255, r));
                 g = Math.max(0, Math.min(255, g));
                 b = Math.max(0, Math.min(255, b));
 
-                // 4. 轉灰階
                 grayPixels[i / 4] = 0.299 * r + 0.587 * g + 0.114 * b;
             }
 
-            // 5. 抖動與二值化 (Floyd-Steinberg)
             for (let y = 0; y < h; y++) {
                 for (let x = 0; x < w; x++) {
                     const idx = y * w + x;
@@ -397,7 +401,6 @@
                 }
             }
 
-            // 6. 寫回 Canvas
             for (let i = 0; i < grayPixels.length; i++) {
                 const val = grayPixels[i] > 128 ? 255 : 0;
                 const idx = i * 4;
@@ -405,7 +408,7 @@
             }
 
             ctx.putImageData(imageData, 0, 0);
-            canvasInfo.innerText = `尺寸: ${w} x ${h} px`;
+            canvasInfo.innerText = `尺寸: ${w} x ${h} px | 亮角範圍: ${VIGNETTE_RANGE_PX}px`;
         }
 
         function applySharpness(imgData, w, h, amount) {

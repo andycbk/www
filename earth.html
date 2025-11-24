@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>手勢控制高解析地球儀</title>
+    
+    <link href="https://cesium.com/downloads/cesiumjs/releases/1.111/Build/Cesium/Widgets/widgets.css" rel="stylesheet">
+    <script src="https://cesium.com/downloads/cesiumjs/releases/1.111/Build/Cesium/Cesium.js"></script>
+    
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #000; }
+        /* Cesium 容器 */
+        #cesiumContainer { width: 100%; height: 100vh; margin: 0; padding: 0; overflow: hidden; }
+        
+        /* 隱藏 Cesium 的一些浮水印和按鈕，讓畫面更乾淨 */
+        .cesium-viewer-bottom, .cesium-viewer-animationContainer, .cesium-viewer-timelineContainer {
+            display: none !important;
+        }
+
+        /* 攝影機預覽 */
+        .video-layer {
+            position: absolute;
+            bottom: 10px;
+            right: 10px;
+            width: 100px;
+            height: 133px;
+            z-index: 10;
+            border: 2px solid rgba(255, 255, 255, 0.5);
+            border-radius: 8px;
+            overflow: hidden;
+            transform: scaleX(-1); /* 鏡像 */
+            opacity: 0.8;
+        }
+        #input_video { width: 100%; height: 100%; object-fit: cover; }
+
+        /* 狀態提示 */
+        #status-box {
+            position: absolute;
+            top: 10px; left: 10px;
+            background: rgba(42, 42, 42, 0.8);
+            color: #fff;
+            padding: 15px;
+            border-radius: 8px;
+            font-family: sans-serif;
+            z-index: 100;
+            pointer-events: none;
+            max-width: 300px;
+        }
+        #status-box h2 { margin: 0 0 10px 0; font-size: 18px; color: #4db8ff;}
+        #status-box p { margin: 5px 0; font-size: 14px; }
+        .highlight { color: #ffcc00; font-weight: bold; }
+
+        /* 手指游標 */
+        #cursor {
+            position: absolute;
+            width: 30px; height: 30px;
+            background: rgba(255, 50, 50, 0.6);
+            border: 3px solid rgba(255, 255, 255, 0.8);
+            border-radius: 50%;
+            z-index: 90;
+            display: none; /* 預設隱藏 */
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="cesiumContainer"></div>
+
+    <div id="status-box">
+        <h2>手勢控制指南</h2>
+        <p id="loading-status" style="color:red;">正在啟動攝影機，請稍候...</p>
+        <p>🖐️ <b>單指移動：</b> 旋轉地球</p>
+        <p>🤏 <b>兩指捏合：</b> 放大/縮小 (看街道)</p>
+    </div>
+
+    <div id="cursor"></div>
+
+    <div class="video-layer">
+        <video id="input_video" playsinline></video>
+    </div>
+
+    <script>
+        // --- 1. CesiumJS 地球儀設定 ---
+        // 這裡使用 Cesium 預設的 Bing Maps 影像，無需 API Key 即可顯示詳細街道
+        const viewer = new Cesium.Viewer('cesiumContainer', {
+            imageryProvider : new Cesium.IonImageryProvider({ assetId: 2 }), // 使用預設高解析衛星圖
+            terrainProvider: Cesium.createWorldTerrain(), // 加入地形起伏
+            baseLayerPicker : false, // 隱藏圖層選擇器
+            geocoder : false, // 隱藏搜尋框
+            animation : false, // 隱藏動畫控制
+            timeline : false, // 隱藏時間軸
+            sceneModePicker : false, // 隱藏模式選擇
+            navigationHelpButton : false, // 隱藏幫助按鈕
+            homeButton: false, // 隱藏回到原點按鈕
+            infoBox: false,
+            selectionIndicator: false,
+            fullscreenButton: false
+        });
+
+        // 移除預設的滑鼠操作，避免衝突 (可選)
+        // viewer.scene.screenSpaceCameraController.enableRotate = false;
+        // viewer.scene.screenSpaceCameraController.enableZoom = false;
+
+        const scene = viewer.scene;
+        const camera = viewer.camera;
+        
+        // 設定初始視角
+        camera.setView({
+            destination : Cesium.Cartesian3.fromDegrees(121.5, 23.5, 10000000.0) // 台灣上方一千萬公尺
+        });
+
+        // --- 2. MediaPipe 手勢變數 ---
+        let previousX = null;
+        let previousY = null;
+        let previousPinchDistance = null;
+        const cursor = document.getElementById('cursor');
+        const loadingStatus = document.getElementById('loading-status');
+
+        // 計算兩點距離的輔助函式 (用於捏合)
+        function getDistance(p1, p2) {
+            return Math.sqrt(Math.pow(p1.x - p2.x, 2) + Math.pow(p1.y - p2.y, 2));
+        }
+
+        function onResults(results) {
+            loadingStatus.style.display = "none"; // 隱藏載入文字
+
+            if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                cursor.style.display = "block";
+                
+                // 取得第一隻手
+                const landmarks = results.multiHandLandmarks[0];
+                
+                // 取得關鍵點：拇指尖(4) 和 食指尖(8)
+                const thumbTip = landmarks[4];
+                const indexTip = landmarks[8];
+
+                // --- 處理游標顯示 (使用食指位置) ---
+                // 鏡像翻轉 X 軸
+                const currentX = 1.0 - indexTip.x;
+                const currentY = indexTip.y;
+                cursor.style.left = (currentX * 100) + "%";
+                cursor.style.top = (currentY * 100) + "%";
+
+                // --- 處理旋轉 (基於食指移動量) ---
+                if (previousX !== null && previousY !== null) {
+                    // 計算與上一幀的位移差 (Delta)
+                    const deltaX = currentX - previousX;
+                    const deltaY = currentY - previousY;
+
+                    // 靈敏度設定
+                    const rotateSpeed = 3.0;
+
+                    // 使用 Cesium 的相機旋轉功能
+                    // 左右移動 -> 繞著中心點旋轉
+                    camera.rotateRight(deltaX * rotateSpeed);
+                    // 上下移動 -> 繞著中心點上下傾斜
+                    camera.rotateUp(deltaY * rotateSpeed);
+                }
+                
+                // 更新上一幀的位置記錄
+                previousX = currentX;
+                previousY = currentY;
+
+                // --- 處理縮放 (捏合手勢) ---
+                // 計算拇指與食指的距離
+                const currentPinchDistance = getDistance(thumbTip, indexTip);
+
+                if (previousPinchDistance !== null) {
+                    // 計算距離變化量
+                    const pinchDelta = currentPinchDistance - previousPinchDistance;
+                    
+                    // 設定縮放靈敏度 (根據目前高度動態調整會更好，這裡先用固定值)
+                    // 高度越高，縮放步距越大
+                    const height = camera.positionCartographic.height;
+                    let zoomFactor = height * 0.05; 
+
+                    // 設定一個最小縮放步距，避免在地面附近卡住
+                    if (zoomFactor < 100) zoomFactor = 100;
+
+                    // 0.01 是一個閥值，避免手抖動造成微幅縮放
+                    if (Math.abs(pinchDelta) > 0.01) {
+                         if (pinchDelta > 0) {
+                            // 距離變大 -> 兩指張開 -> 放大 (Zoom In)
+                             camera.zoomIn(pinchDelta * zoomFactor);
+                         } else {
+                            // 距離變小 -> 兩指捏合 -> 縮小 (Zoom Out)
+                             camera.zoomOut(Math.abs(pinchDelta) * zoomFactor);
+                         }
+                    }
+                }
+                // 更新上一幀的捏合距離
+                previousPinchDistance = currentPinchDistance;
+
+            } else {
+                // 沒有偵測到手時，重置變數
+                cursor.style.display = "none";
+                previousX = null;
+                previousY = null;
+                previousPinchDistance = null;
+            }
+        }
+
+        // --- 3. 初始化 MediaPipe ---
+        const videoElement = document.getElementById('input_video');
+        const hands = new Hands({locateFile: (file) => {
+            return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
+        }});
+
+        hands.setOptions({
+            maxNumHands: 1,
+            modelComplexity: 1,
+            minDetectionConfidence: 0.6, // 提高一點信心度門檻
+            minTrackingConfidence: 0.6
+        });
+
+        hands.onResults(onResults);
+
+        const cameraUtils = new Camera(videoElement, {
+            onFrame: async () => {
+                await hands.send({image: videoElement});
+            },
+            width: 640, // 使用稍高的解析度以獲得更好的手勢精度
+            height: 480,
+            facingMode: 'user'
+        });
+        
+        cameraUtils.start()
+            .catch(err => {
+                console.error(err);
+                loadingStatus.innerText = "錯誤：無法啟動攝影機。請確保使用 HTTPS 或 localhost。";
+                alert("無法啟動攝影機，請檢查權限或是否使用 HTTPS 連線。");
+            });
+
+    </script>
+</body>
+</html>

@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>黑白點陣圖工具 (自訂尺寸版)</title>
+    <style>
+        body {
+            font-family: "Microsoft JhengHei", sans-serif;
+            background-color: #f4f4f9;
+            color: #333;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 10px;
+            margin: 0;
+        }
+        h1 { margin: 10px 0; font-size: 24px; }
+        p.subtitle { margin: 0 0 15px 0; color: #666; font-size: 14px; }
+        
+        .container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            max-width: 1200px;
+            width: 100%;
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            align-items: flex-start;
+        }
+
+        .controls {
+            flex: 0 0 350px;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            align-content: start;
+            border-right: 1px solid #eee;
+            padding-right: 20px;
+        }
+
+        .file-input-wrapper {
+            grid-column: 1 / -1;
+            text-align: center;
+            padding: 15px;
+            border: 2px dashed #aaa;
+            border-radius: 8px;
+            cursor: pointer;
+            background: #fafafa;
+            transition: 0.2s;
+            font-size: 14px;
+            font-weight: bold;
+            color: #555;
+        }
+        .file-input-wrapper:hover { background: #eef; border-color: #007bff; }
+
+        hr {
+            grid-column: 1 / -1;
+            width: 100%;
+            border: 0;
+            border-top: 1px solid #eee;
+            margin: 5px 0;
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            min-width: 0;
+        }
+        
+        .control-group label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 13px;
+            font-weight: bold;
+            margin-bottom: 4px;
+            white-space: nowrap;
+        }
+
+        input[type="range"] {
+            width: 100%;
+            cursor: pointer;
+            margin: 0;
+        }
+
+        .preview-area {
+            flex: 1;
+            min-width: 300px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding-left: 10px;
+        }
+
+        canvas {
+            border: 1px solid #ccc;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+            image-rendering: pixelated;
+            max-width: 100%;
+            height: auto;
+            margin-bottom: 15px; /* 增加 canvas 與下方輸入框的距離 */
+        }
+
+        .action-area {
+            text-align: center;
+            width: 100%;
+            max-width: 500px; /* 限制寬度讓輸入框不要太寬 */
+        }
+
+        /* 新增：尺寸設定區塊樣式 */
+        .resolution-controls {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 15px;
+            background-color: #eef6ff;
+            padding: 10px 15px;
+            border-radius: 8px;
+            border: 1px solid #daeaff;
+            margin-bottom: 12px; /* 讓它與下方的文字保持距離 */
+        }
+        
+        .res-group {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 14px;
+            font-weight: bold;
+            color: #555;
+        }
+
+        .res-group input {
+            width: 70px;
+            padding: 5px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            text-align: center;
+            font-size: 14px;
+        }
+
+        button#downloadBtn {
+            padding: 10px 30px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 15px;
+        }
+        button#downloadBtn:hover { background-color: #0056b3; }
+        button#downloadBtn:disabled { background-color: #ccc; cursor: not-allowed; }
+        
+        .info { font-size: 13px; color: #555; margin-top: 5px; font-weight: bold; }
+        .sub-info { font-size: 12px; color: #888; }
+
+        .dither-section {
+            background-color: #f0f8ff;
+            padding: 8px;
+            border-radius: 5px;
+            border: 1px solid #cce5ff;
+        }
+
+        .tone-section {
+            grid-column: 1 / -1;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            background-color: #fff8f0;
+            padding: 8px;
+            border-radius: 5px;
+            border: 1px solid #ffeeba;
+            margin-bottom: 5px;
+        }
+
+        @media (max-width: 600px) {
+            .controls {
+                grid-template-columns: 1fr;
+                flex: 1;
+                border-right: none;
+                padding-right: 0;
+                border-bottom: 1px solid #eee;
+                padding-bottom: 20px;
+                margin-bottom: 20px;
+            }
+            .file-input-wrapper, hr, .tone-section { grid-column: span 1; }
+            .tone-section { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <h1>黑白點陣圖工具 v2.3</h1>
+    <p class="subtitle">自訂尺寸與 DPI | 四周亮角 25px 限定</p>
+
+    <div class="container">
+        <div class="controls">
+            <div class="file-input-wrapper" onclick="document.getElementById('upload').click()">
+                <span>📂 上傳圖片</span>
+                <input type="file" id="upload" accept="image/*" style="display: none;">
+            </div>
+
+            <div class="tone-section">
+                <div class="control-group">
+                    <label style="color:#d35400;">亮部調整 <span id="val-highlights">0</span></label>
+                    <input type="range" id="highlights" min="-100" max="100" value="0">
+                </div>
+                <div class="control-group">
+                    <label style="color:#2e4053;">暗部調整 <span id="val-shadows">0</span></label>
+                    <input type="range" id="shadows" min="-100" max="100" value="0">
+                </div>
+            </div>
+
+            <div class="control-group">
+                <label>亮度 <span id="val-brightness">0</span></label>
+                <input type="range" id="brightness" min="-100" max="100" value="0">
+            </div>
+
+            <div class="control-group">
+                <label>對比度 <span id="val-contrast">10</span></label>
+                <input type="range" id="contrast" min="-100" max="100" value="10">
+            </div>
+
+            <div class="control-group">
+                <label>銳利度 <span id="val-sharpness">30</span></label>
+                <input type="range" id="sharpness" min="0" max="100" value="30">
+            </div>
+
+            <div class="control-group">
+                <label>四周亮角 (25px) <span id="val-vignette">0</span></label>
+                <input type="range" id="vignette" min="0" max="100" value="0">
+            </div>
+
+            <hr>
+
+            <div class="control-group dither-section">
+                <label style="color:#0056b3;">抖動程度 <span id="val-dither">100%</span></label>
+                <input type="range" id="dither" min="0" max="100" value="100">
+            </div>
+
+            <div class="control-group">
+                <label>黑白基準 <span id="val-threshold">128</span></label>
+                <input type="range" id="threshold" min="0" max="255" value="128">
+            </div>
+        </div>
+
+        <div class="preview-area">
+            <canvas id="canvas"></canvas>
+            
+            <div class="action-area">
+                <div class="resolution-controls">
+                    <div class="res-group">
+                        <span>寬度(cm):</span>
+                        <input type="number" id="inputWidthCm" value="5" step="0.1" min="1">
+                    </div>
+                    <div class="res-group">
+                        <span>DPI:</span>
+                        <input type="number" id="inputDpi" value="250" step="10" min="72">
+                    </div>
+                </div>
+
+                <div class="info" id="canvasInfo">請先上傳圖片</div>
+                <div class="sub-info" id="canvasDetail"></div>
+                <br>
+                <button id="downloadBtn" disabled>下載轉換後的圖片</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const VIGNETTE_RANGE_PX = 25; // 設定亮角範圍維持 25px
+
+        const uploadInput = document.getElementById('upload');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const downloadBtn = document.getElementById('downloadBtn');
+        const canvasInfo = document.getElementById('canvasInfo');
+        const canvasDetail = document.getElementById('canvasDetail');
+
+        // 取得尺寸輸入框
+        const inputWidthCm = document.getElementById('inputWidthCm');
+        const inputDpi = document.getElementById('inputDpi');
+
+        const sliders = {
+            highlights: document.getElementById('highlights'),
+            shadows: document.getElementById('shadows'),
+            brightness: document.getElementById('brightness'),
+            contrast: document.getElementById('contrast'),
+            sharpness: document.getElementById('sharpness'),
+            vignette: document.getElementById('vignette'),
+            dither: document.getElementById('dither'),
+            threshold: document.getElementById('threshold')
+        };
+
+        let originalImage = null;
+        let isProcessing = false;
+
+        // 綁定所有滑桿事件
+        Object.keys(sliders).forEach(key => {
+            sliders[key].addEventListener('input', (e) => {
+                const unit = key === 'dither' ? '%' : '';
+                document.getElementById(`val-${key}`).innerText = e.target.value + unit;
+                requestProcessImage();
+            });
+        });
+
+        // 綁定尺寸輸入框事件 (數值改變即重繪)
+        [inputWidthCm, inputDpi].forEach(input => {
+            input.addEventListener('change', requestProcessImage);
+            input.addEventListener('input', requestProcessImage); // 即時反應
+        });
+
+        uploadInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                const img = new Image();
+                img.onload = () => {
+                    originalImage = img;
+                    requestProcessImage();
+                    downloadBtn.disabled = false;
+                };
+                img.src = event.target.result;
+            };
+            reader.readAsDataURL(file);
+        });
+
+        function requestProcessImage() {
+            if (!isProcessing) {
+                isProcessing = true;
+                requestAnimationFrame(() => {
+                    processImage();
+                    isProcessing = false;
+                });
+            }
+        }
+
+        function processImage() {
+            if (!originalImage) return;
+
+            // 1. 動態計算目標像素寬度
+            let targetCm = parseFloat(inputWidthCm.value);
+            let targetDpi = parseFloat(inputDpi.value);
+
+            // 防呆預設值
+            if (!targetCm || targetCm <= 0) targetCm = 5;
+            if (!targetDpi || targetDpi <= 0) targetDpi = 250;
+
+            const targetWidthPx = Math.round((targetCm / 2.54) * targetDpi);
+            const aspectRatio = originalImage.height / originalImage.width;
+            const targetHeight = Math.round(targetWidthPx * aspectRatio);
+
+            canvas.width = targetWidthPx;
+            canvas.height = targetHeight;
+            
+            ctx.drawImage(originalImage, 0, 0, targetWidthPx, targetHeight);
+            let imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            let data = imageData.data;
+
+            const highlightVal = parseInt(sliders.highlights.value);
+            const shadowVal = parseInt(sliders.shadows.value);
+            const brightness = parseInt(sliders.brightness.value);
+            const contrast = parseInt(sliders.contrast.value);
+            const contrastFactor = (259 * (contrast + 255)) / (255 * (259 - contrast));
+            const sharpness = parseInt(sliders.sharpness.value);
+            const vignetteStr = parseInt(sliders.vignette.value);
+            const ditherFactor = parseInt(sliders.dither.value) / 100;
+            const thresholdBase = parseInt(sliders.threshold.value);
+
+            const w = canvas.width;
+            const h = canvas.height;
+
+            if (sharpness > 0) {
+                imageData = applySharpness(imageData, w, h, sharpness / 100);
+                data = imageData.data;
+            }
+
+            let grayPixels = new Float32Array(w * h);
+
+            for (let i = 0; i < data.length; i += 4) {
+                let r = data[i];
+                let g = data[i+1];
+                let b = data[i+2];
+
+                // 1. 亮暗部調整
+                if (highlightVal !== 0 || shadowVal !== 0) {
+                    let nr = r / 255;
+                    let ng = g / 255;
+                    let nb = b / 255;
+
+                    if (shadowVal !== 0) {
+                        const sStrength = shadowVal * 1.5;
+                        r += sStrength * (1 - nr) * (1 - nr); 
+                        g += sStrength * (1 - ng) * (1 - ng);
+                        b += sStrength * (1 - nb) * (1 - nb);
+                    }
+
+                    if (highlightVal !== 0) {
+                        const hStrength = highlightVal * 1.5;
+                        r += hStrength * nr * nr;
+                        g += hStrength * ng * ng;
+                        b += hStrength * nb * nb;
+                    }
+                    
+                    r = Math.max(0, Math.min(255, r));
+                    g = Math.max(0, Math.min(255, g));
+                    b = Math.max(0, Math.min(255, b));
+                }
+
+                // 2. 亮度與對比度
+                r += brightness; g += brightness; b += brightness;
+                r = contrastFactor * (r - 128) + 128;
+                g = contrastFactor * (g - 128) + 128;
+                b = contrastFactor * (b - 128) + 128;
+
+                // 3. 亮角 (Vignette) - 25px 邊緣限定邏輯
+                if (vignetteStr > 0) {
+                    const px = (i / 4) % w;
+                    const py = Math.floor((i / 4) / w);
+
+                    const distLeft = px;
+                    const distRight = w - 1 - px;
+                    const distTop = py;
+                    const distBottom = h - 1 - py;
+                    
+                    const minDist = Math.min(distLeft, distRight, distTop, distBottom);
+
+                    if (minDist < VIGNETTE_RANGE_PX) {
+                        const edgeFactor = (VIGNETTE_RANGE_PX - minDist) / VIGNETTE_RANGE_PX;
+                        const brightenAmount = edgeFactor * vignetteStr * 2.5; 
+                        
+                        r += brightenAmount;
+                        g += brightenAmount;
+                        b += brightenAmount;
+                    }
+                }
+
+                r = Math.max(0, Math.min(255, r));
+                g = Math.max(0, Math.min(255, g));
+                b = Math.max(0, Math.min(255, b));
+
+                grayPixels[i / 4] = 0.299 * r + 0.587 * g + 0.114 * b;
+            }
+
+            for (let y = 0; y < h; y++) {
+                for (let x = 0; x < w; x++) {
+                    const idx = y * w + x;
+                    const oldPixel = grayPixels[idx];
+                    const newPixel = oldPixel < thresholdBase ? 0 : 255;
+                    grayPixels[idx] = newPixel;
+                    const quantError = (oldPixel - newPixel) * ditherFactor;
+
+                    if (quantError !== 0) {
+                        if (x + 1 < w) grayPixels[idx + 1] += quantError * 7 / 16;
+                        if (x - 1 >= 0 && y + 1 < h) grayPixels[(y + 1) * w + (x - 1)] += quantError * 3 / 16;
+                        if (y + 1 < h) grayPixels[(y + 1) * w + x] += quantError * 5 / 16;
+                        if (x + 1 < w && y + 1 < h) grayPixels[(y + 1) * w + (x + 1)] += quantError * 1 / 16;
+                    }
+                }
+            }
+
+            for (let i = 0; i < grayPixels.length; i++) {
+                const val = grayPixels[i] > 128 ? 255 : 0;
+                const idx = i * 4;
+                data[idx] = val; data[idx+1] = val; data[idx+2] = val;
+            }
+
+            ctx.putImageData(imageData, 0, 0);
+            
+            // 更新資訊顯示
+            canvasInfo.innerText = `最終尺寸: ${w} x ${h} px`;
+            canvasDetail.innerText = `設定: ${targetCm}cm @ ${targetDpi}dpi | 亮角範圍: ${VIGNETTE_RANGE_PX}px`;
+        }
+
+        function applySharpness(imgData, w, h, amount) {
+            const src = imgData.data;
+            const output = new ImageData(w, h);
+            const dst = output.data;
+            for (let y = 0; y < h; y++) {
+                for (let x = 0; x < w; x++) {
+                    const idx = (y * w + x) * 4;
+                    if (x === 0 || y === 0 || x === w - 1 || y === h - 1) {
+                        dst[idx] = src[idx]; dst[idx+1] = src[idx+1]; dst[idx+2] = src[idx+2]; dst[idx+3] = src[idx+3];
+                        continue;
+                    }
+                    const up = ((y - 1) * w + x) * 4;
+                    const down = ((y + 1) * w + x) * 4;
+                    const left = (y * w + (x - 1)) * 4;
+                    const right = (y * w + (x + 1)) * 4;
+                    for (let c = 0; c < 3; c++) {
+                        const val = src[idx + c];
+                        const sharp = 5 * val - (src[up + c] + src[down + c] + src[left + c] + src[right + c]);
+                        dst[idx + c] = Math.max(0, Math.min(255, val + (sharp - val) * amount));
+                    }
+                    dst[idx + 3] = src[idx + 3];
+                }
+            }
+            return output;
+        }
+
+        downloadBtn.addEventListener('click', () => {
+            const link = document.createElement('a');
+            link.download = `processed-${inputWidthCm.value}cm-${inputDpi.value}dpi.png`;
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+        });
+    </script>
+</body>
+</html>
